@@ -33,6 +33,7 @@
 #include <rviz/time_panel.h>
 #include <rviz/tool_properties_panel.h>
 #include <rviz/views_panel.h>
+#include <rviz/record_replay_panel.h>
 
 #include <rviz/panel_factory.h>
 
@@ -62,6 +63,10 @@ static Panel* newViewsPanel()
 {
   return new ViewsPanel();
 }
+static Panel* newRecordReplayPanel()
+{
+  return new RecordReplayPanel();
+}
 
 PanelFactory::PanelFactory() : PluginlibFactory<Panel>("rviz", "rviz::Panel")
 {
@@ -72,6 +77,7 @@ PanelFactory::PanelFactory() : PluginlibFactory<Panel>("rviz", "rviz::Panel")
   addBuiltInClass("rviz", "Tool Properties", "Show and edit properties of tools",
                   &newToolPropertiesPanel);
   addBuiltInClass("rviz", "Views", "Show and edit viewpoints", &newViewsPanel);
+  addBuiltInClass("rviz", "RecordReplay", "Record and replay ROS bags", &newRecordReplayPanel);
 }
 
 } // end namespace rviz

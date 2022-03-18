@@ -33,6 +33,7 @@
 #include <QLabel>
 #include <QToolButton>
 #include <QCloseEvent>
+#include <QDebug>
 
 #include <rviz/panel_dock_widget.h>
 
@@ -59,6 +60,8 @@ PanelDockWidget::PanelDockWidget(const QString& name)
 
   icon_label_ = new QLabel(this);
   icon_label_->setContentsMargins(2, 2, 0, 0);
+
+  qInfo() << "Calling setIcon() in PanelDockWidget::PanelDockWidget()";
   setIcon(QIcon());
 
   QHBoxLayout* title_layout = new QHBoxLayout();
@@ -79,6 +82,7 @@ void PanelDockWidget::setWindowTitle(const QString& title)
 
 void PanelDockWidget::setIcon(const QIcon& icon)
 {
+  qInfo() << "PanelDockWidget::setIcon(" << icon.name().toStdString().c_str() << " for PanelDockWidget " << objectName().toStdString().c_str();
   if (icon.isNull())
   {
     icon_label_->setVisible(false);

@@ -35,6 +35,7 @@
 #include <QFont>
 #include <QMetaObject>
 #include <QWidget>
+#include <QDebug>
 
 #include <OGRE/OgreSceneManager.h>
 #include <OGRE/OgreSceneNode.h>
@@ -370,6 +371,8 @@ void Display::setAssociatedWidget(QWidget* widget)
       connect(associated_widget_panel_, SIGNAL(visibilityChanged(bool)), this,
               SLOT(associatedPanelVisibilityChange(bool)));
       connect(associated_widget_panel_, SIGNAL(closed()), this, SLOT(disable()));
+
+      qInfo() << "Calling associated_widget_panel_->setIcon() in Display::setAssociatedWidget(), line 376";
       associated_widget_panel_->setIcon(getIcon());
     }
     else
@@ -396,6 +399,7 @@ void Display::associatedPanelVisibilityChange(bool visible)
 void Display::setIcon(const QIcon& icon)
 {
   icon_ = icon;
+  qInfo() << "Calling this->setIcon() in Display::setAssociatedWidget(), line 403";
   if (associated_widget_panel_)
   {
     associated_widget_panel_->setIcon(getIcon());

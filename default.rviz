@@ -26,6 +26,10 @@ Panels:
     Name: Time
     SyncMode: 0
     SyncSource: ""
+  - Class: rviz/RecordReplay
+    Name: RecordReplay
+    SyncMode: 0
+    SyncSource: ""
 Visualization Manager:
   Class: ""
   Displays:

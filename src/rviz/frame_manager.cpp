@@ -44,7 +44,7 @@ FrameManager::FrameManager(std::shared_ptr<tf2_ros::Buffer> tf_buffer,
 {
   assert(!tf_listener || tf_buffer); // tf_listener implies tf_buffer to defined too
   tf_buffer_ =
-      tf_buffer ? std::move(tf_buffer) : std::make_shared<tf2_ros::Buffer>(ros::Duration(10 * 60));
+      tf_buffer ? std::move(tf_buffer) : std::make_shared<tf2_ros::Buffer>(ros::Duration(10 * 60), false, ros::Duration(1.0f), std::string("rviz_frame_manager_listener"));
   tf_listener_ = tf_listener ?
                      std::move(tf_listener) :
                      std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, ros::NodeHandle(), true);

@@ -50,6 +50,7 @@
 #include <QToolButton>
 #include <QHBoxLayout>
 #include <QTabBar>
+#include <QDebug>
 
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
@@ -1399,6 +1400,7 @@ QDockWidget* VisualizationFrame::addPanelByName(const QString& name,
 
   record.panel->initialize(manager_);
 
+  qInfo() << "Calling record.dock->setIcon() in VisualizationFrame::addPanelByName(" << name << ")";
   record.dock->setIcon(panel_factory_->getIcon(class_id));
 
   return record.dock;

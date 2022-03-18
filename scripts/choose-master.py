@@ -37,12 +37,13 @@ from __future__ import print_function
 import sys
 import os
 import os.path
-import xmlrpclib
+import xmlrpc
 import signal
 import subprocess
 
-from PySide.QtGui import *
-from PySide.QtCore import *
+from PySide2.QtGui import *
+from PySide2.QtWidgets import *
+from PySide2.QtCore import *
 
 
 def sigintHandler(signal, frame):
@@ -52,7 +53,7 @@ def sigintHandler(signal, frame):
 # Return an array of node names, or None on error (like if the master doesn't exist).
 def getNodesOnMaster(master_uri):
     try:
-        proxy = xmlrpclib.ServerProxy(master_uri)
+        proxy = xmlrpc.ServerProxy(master_uri)
         state = proxy.getSystemState("")
         if state[0] != 1:
             return None

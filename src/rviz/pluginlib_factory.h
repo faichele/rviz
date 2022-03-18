@@ -32,6 +32,7 @@
 #include <QHash>
 #include <QString>
 #include <QStringList>
+#include <QDebug>
 
 #include <string>
 #include <vector>
@@ -127,14 +128,20 @@ public:
 
   QIcon getIcon(const QString& class_id) const override
   {
+    qInfo() << "Calling PluginlibFactory::getIcon(" << class_id << ")";
     QString package = getClassPackage(class_id);
     QString class_name = getClassName(class_id);
     QIcon icon = loadPixmap("package://" + package + "/icons/classes/" + class_name + ".svg");
+    if (icon.isNull())
+      qInfo() << "No SVG icon found for class_id " << class_id;
+
     if (icon.isNull())
     {
       icon = loadPixmap("package://" + package + "/icons/classes/" + class_name + ".png");
       if (icon.isNull())
       {
+        qInfo() << "No PNG icon found for class_id " << class_id;
+        qInfo() << "Loading default_class_icon.png, no class-specific icon was found.";
         icon = loadPixmap("package://rviz/icons/default_class_icon.png");
       }
     }
