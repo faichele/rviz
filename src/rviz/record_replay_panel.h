@@ -45,6 +45,7 @@ class QLabel;
 class QGroupBox;
 class QRadioButton;
 class QCheckList;
+class QSlider;
 
 namespace rviz
 {
@@ -91,7 +92,7 @@ protected Q_SLOTS:
   void stopToggled(bool checked);
   void recordToggled(bool checked);
   void recorderNodeIndexChanged(int index);
-  void onRecordNodesUpdateTimer();
+  void onRecordReplayNodesUpdateTimer();
   void useDefaultTopicsToggled(int state);
 
   /** Read time values from VisualizationManager and update displays. */
@@ -109,7 +110,7 @@ protected:
   bool dispatchRecordingControl(const RecordingControlRequest, QString &status_message);
   bool dispatchReplayControl(const ReplayControlRequest, QString& status_message);
 
-  bool getRecorderNodeServices();
+  bool getRecorderOrPlayerNodeServices(bool player_services);
   bool updateTopicList();
 
   QLabel* control_label_;
@@ -128,6 +129,7 @@ protected:
   QCheckBox* use_default_topics_checkbox_;
   QLabel* topic_list_label_;
   QCheckList* topic_selection_list_;
+  QSlider* replay_msg_selection_slider_;
 
   QTimer* record_nodes_update_timer_;
 

@@ -62,6 +62,7 @@ namespace rviz
   RecordReplayPanel::RecordReplayPanel(QWidget* parent) : Panel(parent)
   {
     control_mode_ = rviz::RECORD_MODE;
+
     // TODO: Expose via inputs
     bag_file_base_name_ = "ros_bag";
     bag_file_compression_type_ = 0; // rosbag::CompressonType::Uncompressed
@@ -70,7 +71,7 @@ namespace rviz
 
     nh_.reset(new ros::NodeHandle("cc_record_replay_control"));
 
-    qInfo() << "Creating control mode widgets";
+    //qDebug() << "Creating control mode widgets";
     control_mode_group_box_ = new QGroupBox("Control mode");
     replay_mode_button_ = new QRadioButton(tr("&Replay"));
     record_mode_button_ = new QRadioButton(tr("R&ecord"));
@@ -85,7 +86,7 @@ namespace rviz
     control_label_ = new QLabel();
     control_label_->setText("Control");
 
-    qInfo() << "Creating start/stop/record buttons";
+    //qDebug() << "Creating start/stop/record buttons";
     QIcon start_icon = loadPixmap("package://rviz/icons/play.svg");
     start_button_ = new QPushButton(start_icon, "Start");
     start_button_->setToolTip("Start ROSBag replay.");
@@ -106,7 +107,7 @@ namespace rviz
     record_button_->setToolTip("Start ROSBag data recording.");
     record_button_->setCheckable(true);
 
-    qInfo() << "Creating node selection combobox";
+    //qDebug() << "Creating node selection combobox";
     recorder_nodes_combobox_ = new QComboBox();
     recorder_nodes_combobox_model_ = new QStringListModel();
     recorder_nodes_combobox_->setModel(recorder_nodes_combobox_model_);
@@ -114,7 +115,7 @@ namespace rviz
     QHBoxLayout* control_mode_layout = new QHBoxLayout();
     control_mode_layout ->addWidget(control_mode_group_box_);
 
-    qInfo() << "Creating layout for topics + recording options";
+    //qDebug() << "Creating layout for topics + recording options";
     QVBoxLayout* nodes_topics_layout = new QVBoxLayout();
     QHBoxLayout* node_selection_layout = new QHBoxLayout();
     recorder_nodes_label_ = new QLabel("Record/replay nodes");
@@ -122,7 +123,7 @@ namespace rviz
     node_selection_layout->addWidget(recorder_nodes_combobox_);
     nodes_topics_layout->addLayout(node_selection_layout);
 
-    qInfo() << "Assembling layouts: Record/replay buttons";
+    //qDebug() << "Assembling layouts: Record/replay buttons";
     QHBoxLayout* record_replay_buttons_layout = new QHBoxLayout();
     record_replay_buttons_layout->addWidget(control_label_);
     record_replay_buttons_layout->addWidget(start_button_);
@@ -130,7 +131,7 @@ namespace rviz
     record_replay_buttons_layout->addWidget(record_button_);
     record_replay_buttons_layout->addWidget(stop_button_);
 
-    qInfo() << "Layouting default topics checkbox";
+    //qDebug() << "Layouting default topics checkbox";
     QHBoxLayout* default_topics_layout = new QHBoxLayout();
     use_default_topics_label_ = new QLabel("Use default topics");
     use_default_topics_checkbox_ = new QCheckBox();
@@ -139,12 +140,12 @@ namespace rviz
     default_topics_layout->addWidget(use_default_topics_label_);
     default_topics_layout->addWidget(use_default_topics_checkbox_);
 
-    qInfo() << "Creating topic selection list";
+    //qDebug() << "Creating topic selection list";
     topic_selection_list_ = new QCheckList();
     //topic_selection_list_->setEnabled(false);
     //topic_selection_list_->setEditable(false);
 
-    qInfo() << "Layouting topic selection.";
+    //qDebug() << "Layouting topic selection.";
     QHBoxLayout* topic_selection_layout = new QHBoxLayout();
     topic_list_label_ = new QLabel("Topics to record/replay");
     topic_selection_layout->addWidget(topic_list_label_);
@@ -156,7 +157,7 @@ namespace rviz
     secondary_layout->addLayout(topic_selection_layout);
     secondary_layout->addLayout(record_replay_buttons_layout);
 
-    qInfo() << "Assembling layouts, main layout";
+    //qDebug() << "Assembling layouts, main layout";
     QHBoxLayout* main_layout = new QHBoxLayout(this);
     main_layout->addLayout(control_mode_layout);
     main_layout->addLayout(secondary_layout);
@@ -172,7 +173,7 @@ namespace rviz
     connect(use_default_topics_checkbox_, SIGNAL(stateChanged(int)), this, SLOT(useDefaultTopicsToggled(int)));
 
     record_nodes_update_timer_ = new QTimer(this);
-    connect(record_nodes_update_timer_, SIGNAL(timeout()), this, SLOT(onRecordNodesUpdateTimer()));
+    connect(record_nodes_update_timer_, SIGNAL(timeout()), this, SLOT(onRecordReplayNodesUpdateTimer()));
   }
 
   void RecordReplayPanel::onInitialize()
@@ -181,6 +182,10 @@ namespace rviz
 
     DisplayGroup* display_group = vis_manager_->getRootDisplayGroup();
     onDisplayAdded(display_group);
+
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "******************************************************************");
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "onInitialize() -- starting update timer for ROS node list updates.");
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "******************************************************************");
 
     record_nodes_update_timer_->start(5000);
   }
@@ -264,7 +269,7 @@ namespace rviz
 
   void RecordReplayPanel::recordModeToggled(bool checked)
   {
-    qInfo() << "Record mode radio button toggled: " << checked;
+    //qDebug() << "Record mode radio button toggled: " << checked;
     if (checked)
     {
       control_mode_ = rviz::RECORD_MODE;
@@ -283,7 +288,7 @@ namespace rviz
   }
   void RecordReplayPanel::replayModeToggled(bool checked)
   {
-    qInfo() << "Replay mode radio button toggled: " << checked;
+    //qDebug() << "Replay mode radio button toggled: " << checked;
     if (checked)
     {
       control_mode_ = rviz::REPLAY_MODE;
@@ -303,7 +308,7 @@ namespace rviz
 
   void RecordReplayPanel::startToggled(bool checked)
   {
-    qInfo() << "startToggled(" << checked << ") -- current_recorder_node_name_: " << current_recorder_node_name_.c_str();
+    //qDebug() << "startToggled(" << checked << ") -- current_recorder_node_name_: " << current_recorder_node_name_.c_str();
     if (checked)
     {
       record_button_->setChecked(false);
@@ -318,13 +323,13 @@ namespace rviz
       start_button_->setCheckable(false);
       pause_button_->setCheckable(true);
 
-      qInfo() << "Start rosbag replay.";
+      //qDebug() << "Start rosbag replay.";
     }
   }
 
   void RecordReplayPanel::pauseToggled(bool checked)
   {
-    qInfo() << "pauseToggled(" << checked << ")";
+    //qDebug() << "pauseToggled(" << checked << ")";
     if (checked)
     {
       record_button_->setChecked(false);
@@ -339,13 +344,13 @@ namespace rviz
       pause_button_->setCheckable(false);
       start_button_->setCheckable(true);
 
-      qInfo() << "Pause rosbag replay. -- current_recorder_node_name_: " << current_recorder_node_name_.c_str();
+      //qDebug() << "Pause rosbag replay. -- current_recorder_node_name_: " << current_recorder_node_name_.c_str();
     }
   }
 
   void RecordReplayPanel::stopToggled(bool checked)
   {
-    qInfo() << "stopToggled(" << checked << ") -- current_recorder_node_name_: " << current_recorder_node_name_.c_str();
+    //qDebug() << "stopToggled(" << checked << ") -- current_recorder_node_name_: " << current_recorder_node_name_.c_str();
     if (checked)
     {
       record_button_->setChecked(false);
@@ -362,26 +367,26 @@ namespace rviz
       start_button_->setCheckable(true);
       pause_button_->setCheckable(true);
 
-      qInfo() << "Stop rosbag replay or recording.";
+      //qDebug() << "Stop rosbag replay or recording.";
       QString status_message;
       if (control_mode_ == rviz::RECORD_MODE)
       {
-        qInfo() << "Dispatching recording control command (stop recording).";
+        //qDebug() << "Dispatching recording control command (stop recording).";
         if (dispatchRecordingControl(rviz::STOP_RECORDING, status_message))
         {
-          qInfo() << "Successfully dispatched command to stop recording.";
+          //qDebug() << "Successfully dispatched command to stop recording.";
         }
       }
       else if (control_mode_ == rviz::REPLAY_MODE)
       {
-        qInfo() << "Stop active replay process (if any).";
+        //qDebug() << "Stop active replay process (if any).";
       }
     }
   }
 
   void RecordReplayPanel::recordToggled(bool checked)
   {
-    qInfo() << "recordToggled(" << checked << ") -- current_recorder_node_name_: " << current_recorder_node_name_.c_str();
+    //qDebug() << "recordToggled(" << checked << ") -- current_recorder_node_name_: " << current_recorder_node_name_.c_str();
     if (checked)
     {
       start_button_->setChecked(false);
@@ -396,16 +401,16 @@ namespace rviz
 
       record_button_->setCheckable(false);
 
-      qInfo() << "Begin rosbag recording";
-      qInfo() << "control_mode_ = " << control_mode_ << "; rviz::RECORD_MODE = " << rviz::RECORD_MODE << ", rviz::REPLAY_MODE = " << rviz::REPLAY_MODE;
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Begin rosbag recording.");
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "control_mode_ = " << (int) control_mode_ << "; rviz::RECORD_MODE = " << (int) rviz::RECORD_MODE << ", rviz::REPLAY_MODE = " << (int) rviz::REPLAY_MODE);
 
       QString status_message;
       if (control_mode_ == rviz::RECORD_MODE)
       {
-        qInfo() << "Dispatching recording control command (start recording).";
+        ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Dispatching recording control command (start recording).");
         if (dispatchRecordingControl(rviz::START_RECORDING, status_message))
         {
-          qInfo() << "Successfully dispatched command to start recording.";
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Successfully dispatched command to start recording: " << status_message.toStdString());
         }
       }
     }
@@ -413,31 +418,33 @@ namespace rviz
 
   void RecordReplayPanel::recorderNodeIndexChanged(int index)
   {
-    qInfo() << "recorderNodeIndexChanged(" << index << ")";
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "recorderNodeIndexChanged(" << index << ")");
     if (index >= 0)
     {
       QString recorder_node_name = recorder_nodes_combobox_->currentText();
       if (!recorder_node_name.isEmpty())
       {
-        qInfo() << "New recorder node for rosbag recording control selected: " << recorder_node_name;
+        ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "New node for rosbag recording/replay control selected: " << recorder_node_name.toStdString());
         current_recorder_node_name_ = recorder_node_name.toStdString();
-        qInfo() << "Now calling getRecorderNodeServices()";
-        if (getRecorderNodeServices())
+        ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Now calling getRecorderOrPlayerNodeServices()");
+        bool player_services = (control_mode_ == rviz::REPLAY_MODE);
+        if (getRecorderOrPlayerNodeServices(player_services))
         {
-          qInfo() << "Successfully retrieved recorder node services for selected node.";
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Successfully retrieved recorder node services for selected node.");
           updateTopicList();
         }
       }
     }
     else
     {
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Empty or invalid record/replay node selection in recorderNodeIndexChanged(): index " << index);
       current_recorder_node_name_ = "";
     }
   }
 
   void RecordReplayPanel::useDefaultTopicsToggled(int state)
   {
-    qInfo() << "useDefaultTopicsToggled(" << state << ") -- Qt::Checked = " << Qt::CheckState::Checked;
+    //qDebug() << "useDefaultTopicsToggled(" << state << ") -- Qt::Checked = " << Qt::CheckState::Checked;
     if (state == 2) // Qt::Checked?
     {
       topic_selection_list_->setEnabled(false);
@@ -451,19 +458,19 @@ namespace rviz
   }
 
 
-  void RecordReplayPanel::onRecordNodesUpdateTimer()
+  void RecordReplayPanel::onRecordReplayNodesUpdateTimer()
   {
-    qInfo() << "onRecordNodesUpdateTimer()";
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "onRecordReplayNodesUpdateTimer()");
     ros::V_string node_names;
     if (ros::master::getNodes(node_names))
     {
       std::vector<std::string> all_node_names_tmp;
-      qInfo() << "Currently active ROS nodes: " << node_names.size();
-      qInfo() << "Previously known ROS nodes: " << all_node_names_.size();
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Currently active ROS nodes: " << node_names.size());
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Previously known ROS nodes: " << all_node_names_.size());
 
       bool initial_node_list_buildup = all_node_names_.empty();
 
-      qInfo() << "initial_node_list_buildup = " << (int) initial_node_list_buildup;
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "initial_node_list_buildup = " << (int) initial_node_list_buildup);
 
       if (!initial_node_list_buildup)
       {
@@ -479,13 +486,13 @@ namespace rviz
       {
         for (size_t k = 0; k < node_names.size(); k++)
         {
-          qInfo() << "Initially adding new node: " << node_names[k].c_str();
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Initially adding new node: " << node_names[k]);
           all_node_names_.emplace_back(node_names[k]);
           all_node_names_tmp.emplace_back(node_names[k]);
         }
       }
 
-      qInfo() << "all_node_names_tmp.size() = " << all_node_names_tmp.size() << ", all_node_names_.size() = " << all_node_names_.size();
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "all_node_names_tmp.size() = " << all_node_names_tmp.size() << ", all_node_names_.size() = " << all_node_names_.size());
 
       bool removed_existing_recorder_node = false;
       bool found_new_recorder_node = false;
@@ -494,16 +501,16 @@ namespace rviz
       {
         if (std::find(all_node_names_tmp.begin(), all_node_names_tmp.end(), all_node_names_[k]) == all_node_names_tmp.end())
         {
-          qInfo() << "Node no longer active: " << all_node_names_[k].c_str();
-          if (boost::algorithm::ends_with(all_node_names_[k], "_data_recorder"))
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Node no longer active: " << all_node_names_[k]);
+          if (boost::algorithm::ends_with(all_node_names_[k], "_data_recorder") || boost::algorithm::ends_with(all_node_names_[k], "_data_player"))
           {
-            qInfo() << "Removing data recorder node that is no longer active: " << all_node_names_[k].c_str();
+            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Removing data recorder node that is no longer active: " << all_node_names_[k]);
             recorder_node_names_.erase(std::remove(recorder_node_names_.begin(), recorder_node_names_.end(), all_node_names_[k]), recorder_node_names_.end());
 
-            qInfo() << "Recorder node names list size now: " << recorder_node_names_.size() << " nodes.";
+            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Recorder node names list size now: " << recorder_node_names_.size() << " nodes.");
             for (size_t k = 0; k < recorder_node_names_.size(); k++)
             {
-              qInfo() << " * " << recorder_node_names_[k].c_str();
+              ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", " * " << recorder_node_names_[k]);
             }
             removed_existing_recorder_node = true;
           }
@@ -514,42 +521,42 @@ namespace rviz
       {
         if (std::find(all_node_names_.begin(), all_node_names_.end(), node_names[k]) == all_node_names_.end())
         {
-          qInfo() << "New node found: " << node_names[k].c_str();
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "New node found: " << node_names[k].c_str());
           all_node_names_tmp.emplace_back(node_names[k]);
         }
-        if (boost::algorithm::ends_with(node_names[k], "_data_recorder"))
+        if (boost::algorithm::ends_with(node_names[k], "_data_recorder") || boost::algorithm::ends_with(all_node_names_[k], "_data_player"))
         {
           if (std::find(recorder_node_names_.begin(), recorder_node_names_.end(), node_names[k]) == recorder_node_names_.end())
           {
-            qInfo() << "Found new data recorder node: " << node_names[k].c_str();
+            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Found new data recorder node: " << node_names[k]);
             recorder_node_names_.emplace_back(node_names[k]);
             found_new_recorder_node = true;
           }
         }
       }
 
-      qInfo() << "*******************************************************************************************";
-      qInfo() << "found_new_recorder_node = " << (int) found_new_recorder_node << ", removed_existing_recorder_node = " << (int) removed_existing_recorder_node;
-      qInfo() << "*******************************************************************************************";
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "*******************************************************************************************");
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "found_new_recorder_node = " << (int) found_new_recorder_node << ", removed_existing_recorder_node = " << (int) removed_existing_recorder_node);
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "*******************************************************************************************");
 
       all_node_names_ = all_node_names_tmp;
 
       if (found_new_recorder_node || removed_existing_recorder_node)
       {
         QStringList current_cb_items = recorder_nodes_combobox_model_->stringList();
-        qInfo() << "Current ComboBox items: " << current_cb_items;
+        ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Current ComboBox items: " << current_cb_items.size() << " items.");
         if (current_cb_items.size() != recorder_node_names_.size())
         {
-          qInfo() << "Number of registered recorder nodes changed, update of node list in ComboBox is required.";
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Number of registered recorder nodes changed, update of node list in ComboBox is required.");
           QString selected_node_name = recorder_nodes_combobox_->currentText();
           int selected_node_index = current_cb_items.indexOf(selected_node_name);
           if (current_cb_items.contains(selected_node_name))
           {
-            qInfo() << "Currently selected recorder node is still in updated node list at index: " << selected_node_index;
+            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Currently selected recorder node is still in updated node list at index: " << selected_node_index);
           }
           else
           {
-            qInfo() << "No node selected yet, or previously selected node is no longer in updated node list. Picking first entry.";
+            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "No node selected yet, or previously selected node is no longer in updated node list. Picking first entry.");
             selected_node_index = 0;
           }
 
@@ -574,11 +581,11 @@ namespace rviz
             }
           }
 
-          qInfo() << "===================================================";
-          qInfo() << "Recorder node list changed, updating ComboBox data.";
-          qInfo() << "===================================================";
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "===================================================");
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Recorder/player node list changed, updating ComboBox data.");
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "===================================================");
 
-          qInfo() << "New ComboBox items: " << updated_cb_items;
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "New ComboBox items: " << updated_cb_items.size());
           recorder_nodes_combobox_->clear();
           recorder_nodes_combobox_model_->setStringList(updated_cb_items);
 
@@ -587,36 +594,36 @@ namespace rviz
       }
       else
       {
-        qInfo() << "Recorder node list is unchanged, not updating ComboBox.";
+        ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Recorder/player node list is unchanged, not updating ComboBox.");
       }
     }
   }
 
-  bool RecordReplayPanel::getRecorderNodeServices()
+  bool RecordReplayPanel::getRecorderOrPlayerNodeServices(bool player_services)
   {
-    qInfo() << "In getRecorderNodeServices()";
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "In getRecorderOrPlayerNodeServices()");
     XmlRpc::XmlRpcValue req = current_recorder_node_name_;
     XmlRpc::XmlRpcValue res;
     XmlRpc::XmlRpcValue pay;
 
-    qInfo() << "Calling getSystemState operation on ROS master to retrieve list of available ROS services.";
-    qInfo() << "Current recorder control node name: " << current_recorder_node_name_.c_str();
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Calling getSystemState operation on ROS master to retrieve list of available ROS services.");
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Current recorder control node name: " << current_recorder_node_name_);
 
     auto last_slash_idx = current_recorder_node_name_.find_last_of("/");
 
     if (last_slash_idx != std::string::npos)
     {
       std::string robot_node_name = current_recorder_node_name_.substr(1, last_slash_idx - 1);
-      qInfo() << "Robot node name: " << robot_node_name.c_str();
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Robot node name: " << robot_node_name);
 
       ros::master::execute("getSystemState", req, res, pay, true);
 
       if (res.size() > 0)
       {
-        qInfo() << "Result size = " << res.size();
+        //qDebug() << "Result size = " << res.size();
         /*for (int k = 0; k < res.size(); k++)
         {
-          qInfo() << " * Record " << k << ": " << res[k].toXml().c_str();
+          //qDebug() << " * Record " << k << ": " << res[k].toXml().c_str();
         }*/
 
         std::vector<std::string> ros_services;
@@ -627,20 +634,20 @@ namespace rviz
           gh.erase(gh.begin(), gh.begin() + 7);
           gh.erase(gh.end() - 8, gh.end());
           ros_services.emplace_back(gh);
-          // qInfo() << "ROS service record: " << gh.c_str();
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "ROS service record: " << gh);
         }
 
         std::sort(ros_services.begin(), ros_services.end());
 
         bool current_recorder_node_control_srv_found = false;
         std::string current_recorder_node_control_srv_uri;
-        qInfo() << "Active ROS services: " << ros_services.size();
+        ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Active ROS services: " << ros_services.size());
         for (int k = 0; k < ros_services.size(); k++)
         {
-          qInfo() << " * Service " << k << ": " << ros_services[k].c_str();
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", " * Service " << k << ": " << ros_services[k]);
           if (boost::algorithm::starts_with(ros_services[k], "/cc_data_recorders/" + robot_node_name))
           {
-            qInfo() << "Found recording control service: " << ros_services[k].c_str();
+            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Found recording control service: " << ros_services[k]);
             current_recorder_node_control_srv_found = true;
             current_recorder_node_control_srv_uri = ros_services[k];
             break;
@@ -654,23 +661,26 @@ namespace rviz
         else
         {
           current_recorder_node_control_srv_uri_.clear();
-          qWarning() << "Did not find recorder node control service for recorder node " << robot_node_name.c_str() << "!";
+          ROS_WARN_STREAM_NAMED("rviz_record_replay_panel", "Did not find recorder node control service for recorder node " << robot_node_name << "!");
           return false;
         }
       }
       else
       {
-        qWarning() << "getSystemState did not return any data!";
+        ROS_WARN_STREAM_NAMED("rviz_record_replay_panel", "getSystemState did not return any information!");
         return false;
       }
       return true;
     }
 
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "");
     return false;
   }
 
   bool RecordReplayPanel::updateTopicList()
   {
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "updateTopicList()");
+
     XmlRpc::XmlRpcValue params("ros_topic_list");
     XmlRpc::XmlRpcValue results;
     XmlRpc::XmlRpcValue r;
@@ -680,7 +690,7 @@ namespace rviz
 
     if (ros::master::execute("getTopicTypes", params, results, r, false) == true)
     {
-      qInfo() << "Retrieved list of topics from roscore.";
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Retrieved list of topics from roscore.");
       if (results.getType() == XmlRpc::XmlRpcValue::TypeArray)
       {
         int32_t i = 2;
@@ -697,7 +707,7 @@ namespace rviz
                 {
                   std::string topic = static_cast<std::string>(results[i][j][0]);
                   std::string type = static_cast<std::string>(results[i][j][1]);
-                  qInfo() << "Topic : " << topic.c_str() << " -> " << type.c_str();
+                  ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", " * Topic : " << topic << " -> " << type);
 
                   if (initial_topic_list_buildup)
                   {
@@ -730,7 +740,7 @@ namespace rviz
           topic_selection_list_->clear();
           for (size_t k = 0; k < topic_list_.size(); k++)
           {
-            qInfo() << "Adding topic " << k << ": " << QString::fromStdString(topic_list_[k]);
+            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", " * Adding topic " << k << ": " << topic_list_[k]);
             topic_selection_list_->addCheckItem(QString::fromStdString(topic_list_[k]), QVariant(QString::fromStdString(topic_list_[k])), Qt::CheckState::Checked);
           }
         }
@@ -743,31 +753,35 @@ namespace rviz
 
   bool RecordReplayPanel::dispatchRecordingControl(const RecordingControlRequest control_request, QString& status_message)
   {
-    qInfo() << "dispatchRecordingControl() called.";
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "dispatchRecordingControl() called: control_request = " << (int) control_request);
 
     if (control_mode_ != rviz::RECORD_MODE)
     {
-      qWarning() << "Replay mode is active, not dispatching record control request.";
+      ROS_WARN_STREAM_NAMED("rviz_record_replay_panel", "Replay mode is active, not dispatching record control request.");
       return false;
     }
+
     carecules_rosbag_msgs::CCRosbagRecordRequest record_request;
     carecules_rosbag_msgs::CCRosbagRecordResponse record_response;
 
     if (use_default_topics_checkbox_->checkState() == Qt::Checked)
     {
-      qInfo() << "Instructing recorder node to use its default topic list.";
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Instructing recorder node to use its default topic list.");
+
       record_request.useDefaultTopics = true;
     }
     else
     {
-      qInfo() << "Providing user-defined topic list for recording.";
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Providing user-defined topic list for recording.");
+
       QStandardItemModel* topic_selection_model = qobject_cast<QStandardItemModel*>(topic_selection_list_->model());
       record_request.useDefaultTopics = false;
       for (int i = 0; i < topic_selection_model->rowCount(); i++)
       {
         if (topic_selection_model->item(i)->checkState() == Qt::Checked)
         {
-          qInfo() << "Adding topic to list of topics to record: " << topic_selection_model->item(i)->text();
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", " * Adding topic to list of topics to record: " << topic_selection_model->item(i)->text().toStdString());
+
           record_request.topicsToRecord.emplace_back(topic_selection_model->item(i)->text().toStdString());
         }
       }
@@ -781,42 +795,62 @@ namespace rviz
     if (control_request == rviz::START_RECORDING)
     {
       record_request.startRecording = true;
-      qInfo() << "Start recording.";
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Start recording.");
     }
     else if (control_request == rviz::STOP_RECORDING)
     {
       record_request.startRecording = false;
-      qInfo() << "Stop recording.";
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Stop recording.");
     }
 
     ros::ServiceClient recording_service_client = nh_->serviceClient<carecules_rosbag_msgs::CCRosbagRecord>(current_recorder_node_control_srv_uri_);
     if (recording_service_client.waitForExistence(ros::Duration(0.05)))
     {
-      qInfo() << "Recorder node control is available: " << current_recorder_node_control_srv_uri_.c_str();
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Recorder node control is available: " << current_recorder_node_control_srv_uri_);
       if (recording_service_client.call(record_request, record_response))
       {
-        qInfo() << "Service call to recorder node control service successful.";
+        ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Service call to recorder node control service successful.");
         if (record_response.recordingActive && control_request == rviz::START_RECORDING)
-        {
+        { 
           status_message = QString("Recording started successfully: ") + QString::fromStdString(record_response.recordingStatus);
+
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", status_message.toStdString());
+
           return true;
         }
         else if (!record_response.recordingActive && control_request == rviz::START_RECORDING)
         {
           status_message = QString("Recording failed to start: ") + QString::fromStdString(record_response.recordingStatus);
+
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", status_message.toStdString());
+
           return false;
         }
         else if (!record_response.recordingActive && control_request == rviz::STOP_RECORDING)
         {
           status_message = QString("Recording stopped successfully: ") + QString::fromStdString(record_response.recordingStatus);
+
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", status_message.toStdString());
+
           return true;
         }
         else if (record_response.recordingActive && control_request == rviz::STOP_RECORDING)
         {
           status_message = QString("Recording failed to stop: ") + QString::fromStdString(record_response.recordingStatus);
+
+          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", status_message.toStdString());
+
           return false;
         }
       }
+      else
+      {
+        ROS_WARN_STREAM_NAMED("rviz_record_replay_panel", "Failed to call service '" << current_recorder_node_control_srv_uri_ << "' when dispatching recording control request!");
+      }
+    }
+    else
+    {
+      ROS_WARN_STREAM_NAMED("rviz_record_replay_panel", "Failed to call service '" << current_recorder_node_control_srv_uri_ << "' when dispatching recording control request. Service does not exist!");
     }
 
     return false;
@@ -824,11 +858,11 @@ namespace rviz
 
   bool RecordReplayPanel::dispatchReplayControl(const ReplayControlRequest control_request, QString &status_message)
   {
-    qInfo() << "dispatchReplayControl() called.";
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "dispatchReplayControl() called.");
 
     if (control_mode_ != rviz::REPLAY_MODE)
     {
-      qWarning() << "Record mode is active, not dispatching replay control request.";
+      ROS_WARN_STREAM_NAMED("rviz_record_replay_panel", "Record mode is active, not dispatching replay control request.");
       return false;
     }
 
