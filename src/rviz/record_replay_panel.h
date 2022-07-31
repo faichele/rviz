@@ -33,6 +33,8 @@
 #include <rviz/panel.h>
 #include <ros/ros.h>
 
+#include <qstring.h>
+
 class QLineEdit;
 class QComboBox;
 class QCheckBox;
@@ -112,31 +114,35 @@ protected:
 
   bool getRecorderOrPlayerNodeServices(bool player_services);
   bool updateTopicList();
+  void updateRecorderPlayerNodesList(bool force_update = false);
 
   QLabel* control_label_;
   QPushButton* start_button_;
   QPushButton* pause_button_;
   QPushButton* stop_button_;
   QPushButton* record_button_;
-
-  QLabel* recorder_nodes_label_;
+  QLabel* recorder_player_nodes_label_;
   QComboBox* recorder_nodes_combobox_;
   QStringListModel* recorder_nodes_combobox_model_;
   QGroupBox* control_mode_group_box_;
+  QGroupBox* replay_control_group_box_;
   QRadioButton* replay_mode_button_;
   QRadioButton* record_mode_button_;
   QLabel* use_default_topics_label_;
   QCheckBox* use_default_topics_checkbox_;
   QLabel* topic_list_label_;
   QCheckList* topic_selection_list_;
-  QSlider* replay_msg_selection_slider_;
 
-  QTimer* record_nodes_update_timer_;
+  QSlider* replay_msg_selection_slider_;
+  QComboBox* replay_rosbag_folders_combobox_;
+  QCheckList* replay_rosbag_files_list_;
+
+  QTimer* recorder_player_nodes_update_timer_;
 
   ros::NodeHandlePtr nh_;
 
   std::vector<std::string> all_node_names_;
-  std::vector<std::string> recorder_node_names_;
+  std::vector<std::string> recorder_player_node_names_;
 
   std::vector<std::string> topic_list_;
 
@@ -149,6 +155,8 @@ protected:
   std::string current_recorder_node_control_srv_uri_;
 
   RecordReplayControlMode control_mode_;
+
+  unsigned long replay_slider_message_count_;
 };
 
 } // namespace rviz
