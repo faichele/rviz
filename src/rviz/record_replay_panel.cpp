@@ -207,7 +207,7 @@ namespace rviz
     connect(pause_button_, SIGNAL(toggled(bool)), this, SLOT(pauseToggled(bool)));
     connect(record_button_, SIGNAL(toggled(bool)), this, SLOT(recordToggled(bool)));
     connect(stop_button_, SIGNAL(toggled(bool)), this, SLOT(stopToggled(bool)));
-    connect(recorder_nodes_combobox_, SIGNAL(currentIndexChanged(int)), this, SLOT(recorderNodeIndexChanged(int)));
+    connect(recorder_nodes_combobox_, SIGNAL(currentIndexChanged(int)), this, SLOT(recordReplayNodeIndexChanged(int)));
     connect(use_default_topics_checkbox_, SIGNAL(stateChanged(int)), this, SLOT(useDefaultTopicsToggled(int)));
 
     recorder_player_nodes_update_timer_ = new QTimer(this);
@@ -480,7 +480,7 @@ namespace rviz
     }
   }
 
-  void RecordReplayPanel::recorderNodeIndexChanged(int index)
+  void RecordReplayPanel::recordReplayNodeIndexChanged(int index)
   {
     ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "recorderNodeIndexChanged(" << index << ")");
     if (index >= 0)
@@ -692,6 +692,40 @@ namespace rviz
     }
   }
 
+  void RecordReplayPanel::updateRosbagsForReplayList()
+  {
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "updateRosbagsForReplayList()");
+    if (control_mode_ == rviz::REPLAY_MODE)
+    {
+      if (!recorder_nodes_combobox_->currentText().isEmpty())
+      {
+        ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "In REPLAY_MODE, querying available rosbag sets from selected player node: " << recorder_nodes_combobox_->currentText().toStdString());
+
+        replay_rosbag_folders_combobox_->setEnabled(true);
+        replay_rosbag_files_list_->setEnabled(true);
+      }
+      else
+      {
+        ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "In REPLAY_MODE, but no player node is selected or no player nodes are active. Disabling and clearing replay control GUI elements.");
+
+        replay_rosbag_folders_combobox_->clear();
+        replay_rosbag_folders_combobox_->setEnabled(false);
+        replay_rosbag_files_list_->clear();
+        replay_rosbag_files_list_->setEnabled(false);
+      }
+    }
+    else
+    {
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "In RECORD_MODE, disabling and clearing rosbag replay GUI controls.");
+
+      replay_rosbag_folders_combobox_->clear();
+      replay_rosbag_folders_combobox_->setEnabled(false);
+      replay_rosbag_files_list_->clear();
+      replay_rosbag_files_list_->setEnabled(false);
+
+    }
+  }
+
   void RecordReplayPanel::onRecordReplayNodesUpdateTimer()
   {
     ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "onRecordReplayNodesUpdateTimer()");
@@ -766,13 +800,17 @@ namespace rviz
       }
       else
       {
-        ROS_WARN_STREAM_NAMED("rviz_record_replay_panel", "getSystemState did not return any information!");
+        ROS_WARN_STREAM_NAMED("rviz_record_replay_panel", "getSystemState() did not return any information!");
         return false;
       }
       return true;
     }
 
-    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "");
+    if (player_services)
+      ROS_WARN_STREAM_NAMED("rviz_record_replay_panel", "Failed to query player node services for currently selected player node " << current_player_node_name_);
+    else
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Failed to query recorder node services for currently selected recorder node " << current_recorder_node_name_);
+
     return false;
   }
 
