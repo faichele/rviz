@@ -29,6 +29,7 @@
 
 #include <stdint.h>
 
+#include <OGRE/OgreIteratorWrapper.h>
 #include <OGRE/OgreMovableObject.h>
 #include <OGRE/OgreSceneNode.h>
 

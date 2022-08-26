@@ -39,6 +39,7 @@
 #include <rviz/view_controller.h>
 #include <rviz/view_manager.h>
 #include <rviz/visualization_manager.h>
+#include <rviz/visualizer_app.h>
 
 #include "views_panel.h"
 
@@ -124,6 +125,9 @@ void ViewsPanel::setViewManager(ViewManager* view_man)
 
 void ViewsPanel::onTypeSelectorChanged(int selected_index)
 {
+  // TODO: Filter out non-default view controller instances?
+  // VisualizerApp::Instance();
+
   QString class_id = camera_type_selector_->itemData(selected_index).toString();
   view_man_->setCurrentViewControllerType(class_id);
 }

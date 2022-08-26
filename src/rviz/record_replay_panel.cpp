@@ -49,6 +49,7 @@
 #include "visualization_manager.h"
 #include "frame_manager.h"
 #include <rviz/load_resource.h>
+#include <rviz/visualizer_app.h>
 
 #include "display_group.h"
 
@@ -59,7 +60,7 @@
 
 namespace rviz
 {
-  RecordReplayPanel::RecordReplayPanel(QWidget* parent) : Panel(parent)
+  RecordReplayPanel::RecordReplayPanel(QWidget* parent) : Panel(parent), node_list_update_interval_(10000)
   {
     control_mode_ = rviz::RECORD_MODE;
     // Placeholder value for replay control slider
@@ -225,7 +226,7 @@ namespace rviz
     ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "onInitialize() -- starting update timer for ROS node list updates.");
     ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "******************************************************************");
 
-    recorder_player_nodes_update_timer_->start(5000);
+    recorder_player_nodes_update_timer_->start(node_list_update_interval_);
   }
 
   void RecordReplayPanel::load(const Config& config)
@@ -326,6 +327,7 @@ namespace rviz
       stop_button_->setEnabled(true);
       stop_button_->setCheckable(true);
 
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Updating recorder node list after switching to record mode.");
       updateRecorderPlayerNodesList(true);
 
       replay_msg_selection_slider_->setEnabled(false);
@@ -355,6 +357,7 @@ namespace rviz
       stop_button_->setEnabled(true);
       stop_button_->setCheckable(true);
 
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Updating player node list after switching to replay mode.");
       updateRecorderPlayerNodesList(true);
 
       replay_msg_selection_slider_->setEnabled(true);
@@ -482,7 +485,7 @@ namespace rviz
 
   void RecordReplayPanel::recordReplayNodeIndexChanged(int index)
   {
-    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "recorderNodeIndexChanged(" << index << ")");
+    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "recordReplayNodeIndexChanged(" << index << ")");
     if (index >= 0)
     {
       QString recorder_node_name = recorder_nodes_combobox_->currentText();
@@ -496,6 +499,8 @@ namespace rviz
         {
           ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Successfully retrieved recorder node services for selected node.");
           updateTopicList();
+
+          updateRosbagsForReplayList();
         }
       }
     }
@@ -529,12 +534,12 @@ namespace rviz
     if (ros::master::getNodes(node_names))
     {
       std::vector<std::string> all_node_names_tmp;
-      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Currently active ROS nodes: " << node_names.size());
-      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Previously known ROS nodes: " << all_node_names_.size());
+      ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Currently active ROS nodes: " << node_names.size());
+      ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Previously known ROS nodes: " << all_node_names_.size());
 
       bool initial_node_list_buildup = all_node_names_.empty();
 
-      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "initial_node_list_buildup = " << (int) initial_node_list_buildup);
+      ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "initial_node_list_buildup = " << (int) initial_node_list_buildup);
 
       if (!initial_node_list_buildup)
       {
@@ -550,13 +555,13 @@ namespace rviz
       {
         for (size_t k = 0; k < node_names.size(); k++)
         {
-          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Initially adding new node: " << node_names[k]);
+          ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Initially adding new node: " << node_names[k]);
           all_node_names_.emplace_back(node_names[k]);
           all_node_names_tmp.emplace_back(node_names[k]);
         }
       }
 
-      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "all_node_names_tmp.size() = " << all_node_names_tmp.size() << ", all_node_names_.size() = " << all_node_names_.size());
+      ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "all_node_names_tmp.size() = " << all_node_names_tmp.size() << ", all_node_names_.size() = " << all_node_names_.size());
 
       bool removed_existing_recorder_node = false;
       bool found_new_recorder_node = false;
@@ -565,16 +570,16 @@ namespace rviz
       {
         if (std::find(all_node_names_tmp.begin(), all_node_names_tmp.end(), all_node_names_[k]) == all_node_names_tmp.end())
         {
-          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Node no longer active: " << all_node_names_[k]);
+          ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Node no longer active: " << all_node_names_[k]);
           if (boost::algorithm::ends_with(all_node_names_[k], "_data_recorder") || boost::algorithm::ends_with(all_node_names_[k], "_data_player_worker"))
           {
-            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Removing data recorder node that is no longer active: " << all_node_names_[k]);
+            ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Removing data recorder node that is no longer active: " << all_node_names_[k]);
             recorder_player_node_names_.erase(std::remove(recorder_player_node_names_.begin(), recorder_player_node_names_.end(), all_node_names_[k]), recorder_player_node_names_.end());
 
-            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Recorder node names list size now: " << recorder_player_node_names_.size() << " nodes.");
+            ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Recorder node names list size now: " << recorder_player_node_names_.size() << " nodes.");
             for (size_t k = 0; k < recorder_player_node_names_.size(); k++)
             {
-              ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", " * " << recorder_player_node_names_[k]);
+              ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", " * " << recorder_player_node_names_[k]);
             }
             removed_existing_recorder_node = true;
           }
@@ -585,42 +590,42 @@ namespace rviz
       {
         if (std::find(all_node_names_.begin(), all_node_names_.end(), node_names[k]) == all_node_names_.end())
         {
-          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "New node found: " << node_names[k].c_str());
+          ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "New node found: " << node_names[k].c_str());
           all_node_names_tmp.emplace_back(node_names[k]);
         }
         if (boost::algorithm::ends_with(node_names[k], "_data_recorder") || boost::algorithm::ends_with(all_node_names_[k], "_data_player_worker"))
         {
           if (std::find(recorder_player_node_names_.begin(), recorder_player_node_names_.end(), node_names[k]) == recorder_player_node_names_.end())
           {
-            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Found new data recorder node: " << node_names[k]);
+            ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Found new data recorder node: " << node_names[k]);
             recorder_player_node_names_.emplace_back(node_names[k]);
             found_new_recorder_node = true;
           }
         }
       }
 
-      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "*******************************************************************************************");
-      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "found_new_recorder_node = " << (int) found_new_recorder_node << ", removed_existing_recorder_node = " << (int) removed_existing_recorder_node);
-      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "*******************************************************************************************");
+      ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "*******************************************************************************************");
+      ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "found_new_recorder_node = " << (int) found_new_recorder_node << ", removed_existing_recorder_node = " << (int) removed_existing_recorder_node);
+      ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "*******************************************************************************************");
 
       all_node_names_ = all_node_names_tmp;
 
       if (found_new_recorder_node || removed_existing_recorder_node || force_update)
       {
         QStringList current_cb_items = recorder_nodes_combobox_model_->stringList();
-        ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Current ComboBox items: " << current_cb_items.size() << " items.");
+        ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Current ComboBox items: " << current_cb_items.size() << " items.");
         if (current_cb_items.size() != (int) recorder_player_node_names_.size())
         {
-          ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Number of registered recorder nodes changed, update of node list in ComboBox is required.");
+          ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Number of registered recorder nodes changed, update of node list in ComboBox is required.");
           QString selected_node_name = recorder_nodes_combobox_->currentText();
           int selected_node_index = current_cb_items.indexOf(selected_node_name);
           if (current_cb_items.contains(selected_node_name))
           {
-            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Currently selected recorder node is still in updated node list at index: " << selected_node_index);
+            ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Currently selected recorder node is still in updated node list at index: " << selected_node_index);
           }
           else
           {
-            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "No node selected yet, or previously selected node is no longer in updated node list. Picking first entry.");
+            ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "No node selected yet, or previously selected node is no longer in updated node list. Picking first entry.");
             selected_node_index = 0;
           }
 
@@ -647,16 +652,16 @@ namespace rviz
 
           if (recorder_node_list_changed)
           {
-            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "==========================================================");
-            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Recorder/player node list changed, updating ComboBox data.");
-            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "==========================================================");
+            ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "==========================================================");
+            ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Recorder/player node list changed, updating ComboBox data.");
+            ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "==========================================================");
 
-            ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "New ComboBox items: " << updated_cb_items.size());
+            ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "New ComboBox items: " << updated_cb_items.size());
             recorder_nodes_combobox_->clear();
 
             if (control_mode_ == rviz::RECORD_MODE)
             {
-              ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Only adding recorder node names to selection list.");
+              ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Only adding recorder node names to selection list.");
               QStringList recorder_node_names;
               for (int k = 0; k < updated_cb_items.size(); k++)
               {
@@ -669,7 +674,7 @@ namespace rviz
             }
             else if (control_mode_ == rviz::REPLAY_MODE)
             {
-              ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Only adding player node names to selection list.");
+              ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Only adding player node names to selection list.");
               QStringList player_node_names;
               for (int k = 0; k < updated_cb_items.size(); k++)
               {
@@ -687,7 +692,7 @@ namespace rviz
       }
       else
       {
-        ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "Recorder/player node list is unchanged, not updating ComboBox.");
+        ROS_DEBUG_STREAM_NAMED("rviz_record_replay_panel", "Recorder/player node list is unchanged, not updating ComboBox.");
       }
     }
   }

@@ -50,7 +50,7 @@
 #include <OGRE/OgreHardwareBufferManager.h>
 #include <OGRE/Overlay/OgreFontManager.h>
 #include <OGRE/Overlay/OgreFont.h>
-#include <OGRE/OgreUTFString.h>
+#include <OGRE/OgreString.h>
 
 #include <sstream>
 
@@ -214,7 +214,8 @@ void MovableText::showOnTop(bool show)
 
 void MovableText::_setupGeometry()
 {
-  Ogre::UTFString::utf32string utfCaption(Ogre::UTFString(mCaption).asUTF32());
+
+  //Ogre::UTFString::utf32string utfCaption(Ogre::UTFString(mCaption).asUTF32());
 
   assert(mpFont);
   assert(!mpMaterial.isNull());
@@ -222,7 +223,7 @@ void MovableText::_setupGeometry()
   unsigned int vertexCount = 0;
 
   // count letters to determine how many vertices are needed
-  for (auto ch : utfCaption)
+  for (auto ch : mCaption)
   {
     if ((ch != ' ') && (ch != '\n'))
     {
@@ -237,7 +238,7 @@ void MovableText::_setupGeometry()
     mUpdateColors = true;
   }
 
-  if (utfCaption.empty())
+  if (mCaption.empty())
   {
     return;
   }
@@ -290,7 +291,7 @@ void MovableText::_setupGeometry()
   float total_height = mCharHeight;
   float total_width = 0.0f;
   float current_width = 0.0f;
-  for (auto ch : utfCaption)
+  for (auto ch : mCaption)
   {
     if (ch == '\n')
     {
@@ -348,8 +349,8 @@ void MovableText::_setupGeometry()
   Ogre::Vector3 currPos(0.0f);
   Ogre::Vector3 min(starting_left, top - total_height, 0.0f);
   Ogre::Vector3 max(starting_left + total_width, top, 0.0f);
-  auto iend = utfCaption.end();
-  for (auto i = utfCaption.begin(); i != iend; ++i)
+  auto iend = mCaption.end();
+  for (auto i = mCaption.begin(); i != iend; ++i)
   {
     if (*i == '\n')
     {

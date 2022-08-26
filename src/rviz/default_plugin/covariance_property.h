@@ -36,6 +36,8 @@
 
 #include <rviz/properties/bool_property.h>
 
+#include <deque>
+
 namespace Ogre
 {
 class SceneManager;

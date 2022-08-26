@@ -31,6 +31,7 @@
 
 #include <QApplication>
 #include <QObject>
+#include <rviz/qsingleton.h>
 
 #ifndef Q_MOC_RUN // See: https://bugreports.qt-project.org/browse/QTBUG-22829
 #include <ros/ros.h>
@@ -44,9 +45,11 @@ namespace rviz
 {
 class VisualizationFrame;
 
-class RVIZ_EXPORT VisualizerApp : public QObject
+class RVIZ_EXPORT VisualizerApp : public QObject, public QSingleton<VisualizerApp>
 {
   Q_OBJECT
+
+  friend class QSingleton<VisualizerApp>;
 public:
   VisualizerApp();
   ~VisualizerApp() override;

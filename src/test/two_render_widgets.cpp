@@ -68,7 +68,7 @@ int main(int argc, char** argv)
   container.show();
 
   // Make a scene and show it in the window.
-  Ogre::SceneManager* scene_manager = render_system->root()->createSceneManager(Ogre::ST_GENERIC);
+  Ogre::SceneManager* scene_manager = render_system->root()->createSceneManager(/*Ogre::ST_GENERIC*/);
 
   Ogre::Entity* thing = scene_manager->createEntity("thing", "rviz_cone.mesh");
   Ogre::SceneNode* node = scene_manager->getRootSceneNode()->createChildSceneNode();

@@ -38,6 +38,10 @@ namespace Ogre
 {
 class OverlaySystem;
 class SceneManager;
+namespace RTShader
+{
+  class ShaderGenerator;
+}
 } // namespace Ogre
 
 namespace rviz
@@ -66,6 +70,9 @@ public:
   // Prepare a scene_manager to render overlays.
   // Needed for Ogre >= 1.9 to use fonts; does nothing for prior versions.
   void prepareOverlays(Ogre::SceneManager* scene_manager);
+
+  // Add a scene manager to the shader generator instance
+  void addSceneManagerToShaderGenerator(Ogre::SceneManager* scene_manager);
 
   // @brief return OpenGl Version as integer, e.g. 320 for OpenGl 3.20
   int getGlVersion()
@@ -118,6 +125,7 @@ private:
 
   Ogre::Root* ogre_root_;
   Ogre::OverlaySystem* ogre_overlay_system_;
+  Ogre::RTShader::ShaderGenerator* ogre_shader_generator_;
 
   int gl_version_;
   int glsl_version_;

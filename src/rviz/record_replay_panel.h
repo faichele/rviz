@@ -93,7 +93,7 @@ protected Q_SLOTS:
   void pauseToggled(bool checked);
   void stopToggled(bool checked);
   void recordToggled(bool checked);
-  void recorderNodeIndexChanged(int index);
+  void recordReplayNodeIndexChanged(int index);
   void onRecordReplayNodesUpdateTimer();
   void useDefaultTopicsToggled(int state);
 
@@ -115,6 +115,7 @@ protected:
   bool getRecorderOrPlayerNodeServices(bool player_services);
   bool updateTopicList();
   void updateRecorderPlayerNodesList(bool force_update = false);
+  void updateRosbagsForReplayList();
 
   QLabel* control_label_;
   QPushButton* start_button_;
@@ -157,6 +158,8 @@ protected:
   RecordReplayControlMode control_mode_;
 
   unsigned long replay_slider_message_count_;
+
+  unsigned int node_list_update_interval_;
 };
 
 } // namespace rviz

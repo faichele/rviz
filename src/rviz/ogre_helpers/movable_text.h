@@ -46,6 +46,7 @@
 #include <OGRE/OgrePrerequisites.h>
 #include <OGRE/OgreMovableObject.h>
 #include <OGRE/OgreRenderable.h>
+#include <OGRE/OgreString.h>
 #include <rviz/ogre_helpers/version_check.h>
 
 namespace Ogre

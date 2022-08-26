@@ -21,6 +21,12 @@ configure_file(env_config.cpp.in ${ENV_CONFIG_FILE} @ONLY)
 # We create one lib with the C++...
 
 add_library(${PROJECT_NAME}
+  bb_characters/bb_character_info.h
+  bb_characters/bb_characters_manager.h
+  bb_characters/bb_character_helpers.h
+  bb_characters/bb_character_info.cpp
+  bb_characters/bb_character_helpers.cpp
+  bb_characters/bb_characters_manager.cpp
   bit_allocator.cpp
   config.cpp
   display.cpp

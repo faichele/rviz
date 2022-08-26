@@ -81,7 +81,8 @@ void ImageDisplay::onInitialize()
     static uint32_t count = 0;
     std::stringstream ss;
     ss << "ImageDisplay" << count++;
-    img_scene_manager_ = Ogre::Root::getSingleton().createSceneManager(Ogre::ST_GENERIC, ss.str());
+    img_scene_manager_ = Ogre::Root::getSingleton().createSceneManager(Ogre::DefaultSceneManagerFactory::FACTORY_TYPE_NAME,
+                                                                       ss.str());
   }
 
   img_scene_node_ = img_scene_manager_->getRootSceneNode()->createChildSceneNode();

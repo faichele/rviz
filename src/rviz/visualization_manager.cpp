@@ -47,6 +47,7 @@
 #include <OGRE/OgreRenderWindow.h>
 #include <OGRE/OgreSharedPtr.h>
 #include <OGRE/OgreCamera.h>
+#include <OGRE/RTShaderSystem/OgreRTShaderSystem.h>
 
 #include <boost/filesystem.hpp>
 #include <utility>
@@ -142,9 +143,11 @@ VisualizationManager::VisualizationManager(RenderPanel* render_panel,
 
   private_->threaded_nh_.setCallbackQueue(&private_->threaded_queue_);
 
-  scene_manager_ = ogre_root_->createSceneManager(Ogre::ST_GENERIC);
+  scene_manager_ = ogre_root_->createSceneManager(/*Ogre::ST_GENERIC*/);
 
   rviz::RenderSystem::RenderSystem::get()->prepareOverlays(scene_manager_);
+
+  rviz::RenderSystem::RenderSystem::get()->addSceneManagerToShaderGenerator(scene_manager_);
 
   directional_light_ = scene_manager_->createLight("MainDirectional");
   directional_light_->setType(Ogre::Light::LT_DIRECTIONAL);

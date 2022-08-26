@@ -30,15 +30,19 @@
 #include <QApplication>
 
 #include <rviz/visualizer_app.h>
+#include <rviz/bb_characters/bb_characters_manager.h>
 
 int main(int argc, char** argv)
 {
   QApplication qapp(argc, argv);
 
-  rviz::VisualizerApp vapp;
-  vapp.setApp(&qapp);
-  if (vapp.init(argc, argv))
+  rviz::VisualizerApp::Instance()->setApp(&qapp);
+  if (rviz::VisualizerApp::Instance()->init(argc, argv))
   {
+    // Initialize character manager - attempt to read YAML files for default characters set
+    // from bb_characters_rviz package
+    bb_characters_rviz::CharactersManager::Instance()->initialize();
+
     return qapp.exec();
   }
   else

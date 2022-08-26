@@ -146,9 +146,9 @@ void QtOgreRenderWindow::preViewportUpdate(const Ogre::RenderTargetViewportEvent
   Ogre::Viewport* viewport = evt.source;
 
   const Ogre::Vector2& offset = camera_->getFrustumOffset();
-  const Ogre::Vector3 pos = camera_->getPosition();
-  const Ogre::Vector3 right = camera_->getRight();
-  const Ogre::Vector3 up = camera_->getUp();
+  const Ogre::Vector3 pos = camera_->getRealPosition();
+  const Ogre::Vector3 right = camera_->getRealRight();
+  const Ogre::Vector3 up = camera_->getRealUp();
 
   if (viewport == right_viewport_)
   {

@@ -54,6 +54,7 @@
 #include <OGRE/OgreRenderWindow.h>
 #include <OGRE/OgreSceneManager.h>
 #include <OGRE/Overlay/OgreOverlaySystem.h>
+#include <OGRE/RTShaderSystem/OgreRTShaderSystem.h>
 
 #include <rviz/env_config.h>
 #include <rviz/ogre_helpers/ogre_logging.h>
@@ -110,6 +111,19 @@ RenderSystem::RenderSystem() : ogre_overlay_system_(nullptr), stereo_supported_(
   ogre_root_->initialise(false);
   makeRenderWindow(dummy_window_id_, 1, 1);
   detectGlVersion();
+
+  if (Ogre::RTShader::ShaderGenerator::initialize())
+  {
+      ROS_INFO_STREAM_NAMED("rviz", "RTShader ShaderGenerator initialized successfully.");
+
+      // Grab the shader generator pointer.
+      ogre_shader_generator_ = Ogre::RTShader::ShaderGenerator::getSingletonPtr();
+      // Set shader cache path.
+      // ogre_shader_generator_->setShaderCachePath(shaderCachePath);
+      // Set the scene manager.
+      // ogre_shader_generator_->addSceneManager(sceneMgr);
+  }
+
   setupResources();
   Ogre::ResourceGroupManager::getSingleton().initialiseAllResourceGroups();
 }
@@ -118,6 +132,12 @@ void RenderSystem::prepareOverlays(Ogre::SceneManager* scene_manager)
 {
   if (ogre_overlay_system_)
     scene_manager->addRenderQueueListener(ogre_overlay_system_);
+}
+
+void RenderSystem::addSceneManagerToShaderGenerator(Ogre::SceneManager* scene_manager)
+{
+  if (ogre_shader_generator_)
+    ogre_shader_generator_->addSceneManager(scene_manager);
 }
 
 void RenderSystem::setupDummyWindowId()

@@ -39,6 +39,8 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/thread/mutex.hpp>
 
+#include <deque>
+
 #include <ros/ros.h>
 
 #include <stdexcept>
