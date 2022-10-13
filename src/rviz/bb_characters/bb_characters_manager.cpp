@@ -29,9 +29,9 @@ namespace bb_characters_rviz
 
   void CharactersManager::getAvailableModels(const std::string& package_name)
   {
-    ROS_INFO_STREAM_NAMED("character_manager", "getAvailableModels()");
+    ROS_INFO_STREAM_NAMED("character_manager", "getAvailableModels(" << package_name << ")");
 
-    std::string package_dir = ros::package::getPath("bb_characters_rviz");
+    std::string package_dir = ros::package::getPath(package_name); // TODO: Make configurable
     ROS_INFO_STREAM_NAMED("character_manager", "Package directory: " << package_dir);
     fs::path package_path(package_dir);
     if (fs::exists(package_path))
@@ -74,6 +74,10 @@ namespace bb_characters_rviz
     {
       ROS_WARN_STREAM_NAMED("character_manager", "Package directory '" << package_dir << "' does NOT exist!");
     }
+
+    ROS_INFO_STREAM_NAMED("character_manager", "================================================");
+    ROS_INFO_STREAM_NAMED("character_manager", "character_visual_infos_.size() = " << character_visual_infos_.size());
+    ROS_INFO_STREAM_NAMED("character_manager", "================================================");
   }
 
   bool CharactersManager::parseModelInfoYamlFile(const std::string& yaml_file_path, const std::string& model_path, const std::string& model_folder_name)

@@ -58,6 +58,8 @@
 
 #include <rviz/visualizer_app.h>
 
+#include <rviz/bb_characters/bb_characters_manager.h>
+
 #define CATCH_EXCEPTIONS 0
 
 namespace po = boost::program_options;
@@ -211,6 +213,10 @@ namespace rviz
       frame_->setShowChooseNewMaster(vm.count("in-mc-wrapper") > 0);
       if (vm.count("splash-screen"))
         frame_->setSplashPath(QString::fromStdString(splash_path));
+
+      // Initialize character manager - attempt to read YAML files for default characters set
+      // from bb_characters_rviz package
+      bb_characters_rviz::CharactersManager::Instance()->initialize();
 
       frame_->initialize(QString::fromStdString(display_config));
 

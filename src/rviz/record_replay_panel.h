@@ -160,6 +160,7 @@ protected:
   unsigned long replay_slider_message_count_;
 
   unsigned int node_list_update_interval_;
+  bool start_node_list_update_timer_;
 };
 
 } // namespace rviz

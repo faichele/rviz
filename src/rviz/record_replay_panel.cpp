@@ -60,7 +60,9 @@
 
 namespace rviz
 {
-  RecordReplayPanel::RecordReplayPanel(QWidget* parent) : Panel(parent), node_list_update_interval_(10000)
+  RecordReplayPanel::RecordReplayPanel(QWidget* parent) : Panel(parent),
+    node_list_update_interval_(10000), start_node_list_update_timer_(false),
+    recorder_player_nodes_update_timer_(nullptr) // TODO - replace with thread-based solution!
   {
     control_mode_ = rviz::RECORD_MODE;
     // Placeholder value for replay control slider
@@ -211,8 +213,11 @@ namespace rviz
     connect(recorder_nodes_combobox_, SIGNAL(currentIndexChanged(int)), this, SLOT(recordReplayNodeIndexChanged(int)));
     connect(use_default_topics_checkbox_, SIGNAL(stateChanged(int)), this, SLOT(useDefaultTopicsToggled(int)));
 
-    recorder_player_nodes_update_timer_ = new QTimer(this);
-    connect(recorder_player_nodes_update_timer_, SIGNAL(timeout()), this, SLOT(onRecordReplayNodesUpdateTimer()));
+    if (start_node_list_update_timer_)
+    {
+      recorder_player_nodes_update_timer_ = new QTimer(this);
+      connect(recorder_player_nodes_update_timer_, SIGNAL(timeout()), this, SLOT(onRecordReplayNodesUpdateTimer()));
+    }
   }
 
   void RecordReplayPanel::onInitialize()
@@ -222,11 +227,14 @@ namespace rviz
     DisplayGroup* display_group = vis_manager_->getRootDisplayGroup();
     onDisplayAdded(display_group);
 
-    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "******************************************************************");
-    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "onInitialize() -- starting update timer for ROS node list updates.");
-    ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "******************************************************************");
+    if (start_node_list_update_timer_ && recorder_player_nodes_update_timer_)
+    {
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "******************************************************************");
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "onInitialize() -- starting update timer for ROS node list updates.");
+      ROS_INFO_STREAM_NAMED("rviz_record_replay_panel", "******************************************************************");
 
-    recorder_player_nodes_update_timer_->start(node_list_update_interval_);
+      recorder_player_nodes_update_timer_->start(node_list_update_interval_);
+    }
   }
 
   void RecordReplayPanel::load(const Config& config)
