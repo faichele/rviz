@@ -55,6 +55,12 @@ public:
   typedef unsigned long WindowIDType;
 #endif
 
+  enum RenderSystemType
+  {
+    OPENGL = 0,
+    VULKAN = 1
+  };
+
   static RenderSystem* get();
 
   Ogre::RenderWindow* makeRenderWindow(WindowIDType window_id,
@@ -95,6 +101,10 @@ public:
   // @brief Disable stereo rendering even if supported in HW.
   static void forceNoStereo();
 
+  static void setRenderSystemType(RenderSystemType);
+
+  static RenderSystemType getRenderSystemType();
+
   // @brief True if we can render stereo on this device.
   bool isStereoSupported()
   {
@@ -133,6 +143,8 @@ private:
   static int force_gl_version_;
   bool stereo_supported_;
   static bool force_no_stereo_;
+
+  static RenderSystemType render_system_type_;
 };
 
 } // end namespace rviz

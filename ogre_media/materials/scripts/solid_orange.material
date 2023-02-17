@@ -1,0 +1,22 @@
+fragment_program shader/solid_orange glsl
+ {
+     source orangeshader.glsl
+     entry_point main_fp
+     profiles ps_1_1 arbfp1
+ }
+
+ material shader/orange
+ {
+     technique
+     {
+         pass
+         {
+             fragment_program_ref shader/solid_orange
+             {
+             }
+             texture_unit
+             {
+             }
+         }
+     }
+ }

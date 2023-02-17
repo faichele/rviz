@@ -28,6 +28,7 @@
  */
 
 #include <algorithm>
+#include <sstream>
 
 #include <QApplication>
 #include <QCursor>
@@ -44,13 +45,18 @@
 #include <OGRE/OgreViewport.h>
 #include <OGRE/OgreMaterialManager.h>
 #include <OGRE/OgreMaterial.h>
+#include <OGRE/OgreTechnique.h>
 #include <OGRE/OgreRenderWindow.h>
 #include <OGRE/OgreSharedPtr.h>
 #include <OGRE/OgreCamera.h>
 #include <OGRE/RTShaderSystem/OgreRTShaderSystem.h>
+#include <OGRE/OgreHighLevelGpuProgramManager.h>
 
 #include <boost/filesystem.hpp>
 #include <utility>
+
+#include <boost/multiprecision/cpp_int.hpp>
+#include <boost/random.hpp>
 
 #include <ros/package.h>
 #include <ros/callback_queue.h>
@@ -82,532 +88,714 @@
 #include <rviz/visualization_manager.h>
 #include <rviz/window_manager_interface.h>
 
+using namespace boost::random;
+using namespace boost::multiprecision;
+
 namespace rviz
 {
-// helper class needed to display an icon besides "Global Options"
-class IconizedProperty : public Property
-{
-public:
-  IconizedProperty(const QString& name = QString(),
-                   const QVariant& default_value = QVariant(),
-                   const QString& description = QString(),
-                   Property* parent = nullptr,
-                   const char* changed_slot = nullptr,
-                   QObject* receiver = nullptr)
-    : Property(name, default_value, description, parent, changed_slot, receiver){};
-  QVariant getViewData(int column, int role) const override
+  // helper class needed to display an icon besides "Global Options"
+  class IconizedProperty : public Property
   {
-    return (column == 0 && role == Qt::DecorationRole) ? icon_ : Property::getViewData(column, role);
-  }
-  void setIcon(const QIcon& icon) override
-  {
-    icon_ = icon;
-  }
-
-private:
-  QIcon icon_;
-};
-
-class VisualizationManagerPrivate
-{
-public:
-  ros::CallbackQueue threaded_queue_;
-  boost::thread_group threaded_queue_threads_;
-  ros::NodeHandle update_nh_;
-  ros::NodeHandle threaded_nh_;
-  boost::mutex render_mutex_;
-};
-
-VisualizationManager::VisualizationManager(RenderPanel* render_panel,
-                                           WindowManagerInterface* wm,
-                                           std::shared_ptr<tf2_ros::Buffer> tf_buffer,
-                                           std::shared_ptr<tf2_ros::TransformListener> tf_listener)
-  : ogre_root_(Ogre::Root::getSingletonPtr())
-  , update_timer_(nullptr)
-  , shutting_down_(false)
-  , render_panel_(render_panel)
-  , time_update_timer_(0.0f)
-  , frame_update_timer_(0.0f)
-  , render_requested_(1)
-  , frame_count_(0)
-  , window_manager_(wm)
-  , private_(new VisualizationManagerPrivate)
-{
-  // visibility_bit_allocator_ is listed after default_visibility_bit_ (and thus initialized later be
-  // default):
-  default_visibility_bit_ = visibility_bit_allocator_.allocBit();
-
-  frame_manager_ = new FrameManager(std::move(tf_buffer), std::move(tf_listener));
-
-  render_panel->setAutoRender(false);
-
-  private_->threaded_nh_.setCallbackQueue(&private_->threaded_queue_);
-
-  scene_manager_ = ogre_root_->createSceneManager(/*Ogre::ST_GENERIC*/);
-
-  rviz::RenderSystem::RenderSystem::get()->prepareOverlays(scene_manager_);
-
-  rviz::RenderSystem::RenderSystem::get()->addSceneManagerToShaderGenerator(scene_manager_);
-
-  directional_light_ = scene_manager_->createLight("MainDirectional");
-  directional_light_->setType(Ogre::Light::LT_DIRECTIONAL);
-  directional_light_->setDirection(Ogre::Vector3(-1, 0, -1));
-  directional_light_->setDiffuseColour(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
-
-  root_display_group_ = new DisplayGroup();
-  root_display_group_->setName("root");
-  display_property_tree_model_ = new PropertyTreeModel(root_display_group_);
-  display_property_tree_model_->setDragDropClass("display");
-  connect(display_property_tree_model_, SIGNAL(configChanged()), this, SIGNAL(configChanged()));
-
-  tool_manager_ = new ToolManager(this);
-  connect(tool_manager_, SIGNAL(configChanged()), this, SIGNAL(configChanged()));
-  connect(tool_manager_, SIGNAL(toolChanged(Tool*)), this, SLOT(onToolChanged(Tool*)));
-
-  view_manager_ = new ViewManager(this);
-  view_manager_->setRenderPanel(render_panel_);
-  connect(view_manager_, SIGNAL(configChanged()), this, SIGNAL(configChanged()));
-
-  IconizedProperty* ip = new IconizedProperty("Global Options", QVariant(), "", root_display_group_);
-  ip->setIcon(loadPixmap("package://rviz/icons/options.png"));
-  global_options_ = ip;
-
-  fixed_frame_property_ =
-      new TfFrameProperty("Fixed Frame", "map",
-                          "Frame into which all data is transformed before being displayed.",
-                          global_options_, frame_manager_, false, SLOT(updateFixedFrame()), this);
-
-  background_color_property_ =
-      new ColorProperty("Background Color", QColor(48, 48, 48), "Background color for the 3D view.",
-                        global_options_, SLOT(updateBackgroundColor()), this);
-
-  fps_property_ =
-      new IntProperty("Frame Rate", 30, "RViz will try to render this many frames per second.",
-                      global_options_, SLOT(updateFps()), this);
-
-  default_light_enabled_property_ =
-      new BoolProperty("Default Light", true, "Light source attached to the current 3D view.",
-                       global_options_, SLOT(updateDefaultLightVisible()), this);
-
-  root_display_group_->initialize(
-      this); // only initialize() a Display after its sub-properties are created.
-  root_display_group_->setEnabled(true);
-
-  updateFixedFrame();
-  updateBackgroundColor();
-
-  global_status_ = new StatusList("Global Status", root_display_group_);
-
-  createColorMaterials();
-
-  selection_manager_ = new SelectionManager(this);
-
-  update_timer_ = new QTimer;
-  connect(update_timer_, SIGNAL(timeout()), this, SLOT(onUpdate()));
-
-  private_->threaded_queue_threads_.create_thread(
-      boost::bind(&VisualizationManager::threadedQueueThreadFunc, this));
-
-  display_factory_ = new DisplayFactory();
-
-  ogre_render_queue_clearer_ = new OgreRenderQueueClearer();
-  Ogre::Root::getSingletonPtr()->addFrameListener(ogre_render_queue_clearer_);
-}
-
-VisualizationManager::~VisualizationManager()
-{
-  update_timer_->stop();
-  shutting_down_ = true;
-  private_->threaded_queue_threads_.join_all();
-
-  delete update_timer_;
-
-  if (selection_manager_)
-  {
-    selection_manager_->setSelection(M_Picked());
-  }
-
-  delete display_property_tree_model_;
-  delete tool_manager_;
-  delete display_factory_;
-  delete selection_manager_;
-  delete view_manager_;
-
-  if (ogre_root_)
-  {
-    ogre_root_->destroySceneManager(scene_manager_);
-  }
-  delete frame_manager_;
-  delete private_;
-
-  Ogre::Root::getSingletonPtr()->removeFrameListener(ogre_render_queue_clearer_);
-  delete ogre_render_queue_clearer_;
-}
-
-void VisualizationManager::initialize()
-{
-  emitStatusUpdate("Initializing managers.");
-
-  view_manager_->initialize();
-  selection_manager_->initialize();
-  tool_manager_->initialize();
-
-  last_update_ros_time_ = ros::Time::now();
-  last_update_wall_time_ = ros::WallTime::now();
-}
-
-ros::CallbackQueueInterface* VisualizationManager::getThreadedQueue()
-{
-  return &private_->threaded_queue_;
-}
-
-void VisualizationManager::lockRender()
-{
-  private_->render_mutex_.lock();
-}
-
-void VisualizationManager::unlockRender()
-{
-  private_->render_mutex_.unlock();
-}
-
-ros::CallbackQueueInterface* VisualizationManager::getUpdateQueue()
-{
-  return ros::getGlobalCallbackQueue();
-}
-
-void VisualizationManager::startUpdate()
-{
-  float interval = 1000.0 / float(fps_property_->getInt());
-  update_timer_->start(interval);
-}
-
-void VisualizationManager::stopUpdate()
-{
-  update_timer_->stop();
-}
-
-void createColorMaterial(const std::string& name,
-                         const Ogre::ColourValue& color,
-                         bool use_self_illumination)
-{
-  Ogre::MaterialPtr mat = Ogre::MaterialManager::getSingleton().create(
-      name, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
-  mat->setAmbient(color * 0.5f);
-  mat->setDiffuse(color);
-  if (use_self_illumination)
-  {
-    mat->setSelfIllumination(color);
-  }
-  mat->setLightingEnabled(true);
-  mat->setReceiveShadows(false);
-}
-
-void VisualizationManager::createColorMaterials()
-{
-  createColorMaterial("RVIZ/Red", Ogre::ColourValue(1.0f, 0.0f, 0.0f, 1.0f), true);
-  createColorMaterial("RVIZ/Green", Ogre::ColourValue(0.0f, 1.0f, 0.0f, 1.0f), true);
-  createColorMaterial("RVIZ/Blue", Ogre::ColourValue(0.0f, 0.0f, 1.0f, 1.0f), true);
-  createColorMaterial("RVIZ/Cyan", Ogre::ColourValue(0.0f, 1.0f, 1.0f, 1.0f), true);
-  createColorMaterial("RVIZ/ShadedRed", Ogre::ColourValue(1.0f, 0.0f, 0.0f, 1.0f), false);
-  createColorMaterial("RVIZ/ShadedGreen", Ogre::ColourValue(0.0f, 1.0f, 0.0f, 1.0f), false);
-  createColorMaterial("RVIZ/ShadedBlue", Ogre::ColourValue(0.0f, 0.0f, 1.0f, 1.0f), false);
-  createColorMaterial("RVIZ/ShadedCyan", Ogre::ColourValue(0.0f, 1.0f, 1.0f, 1.0f), false);
-}
-
-void VisualizationManager::queueRender()
-{
-  render_requested_ = 1;
-}
-
-void VisualizationManager::onUpdate()
-{
-  ros::WallDuration wall_diff = ros::WallTime::now() - last_update_wall_time_;
-  ros::Duration ros_diff = ros::Time::now() - last_update_ros_time_;
-  float wall_dt = wall_diff.toSec();
-  float ros_dt = ros_diff.toSec();
-  last_update_ros_time_ = ros::Time::now();
-  last_update_wall_time_ = ros::WallTime::now();
-
-  if (ros_dt < 0.0)
-  {
-    resetTime();
-  }
-
-  ros::spinOnce();
-
-  Q_EMIT preUpdate();
-
-  frame_manager_->update();
-
-  root_display_group_->update(wall_dt, ros_dt);
-
-  view_manager_->update(wall_dt, ros_dt);
-
-  time_update_timer_ += wall_dt;
-
-  if (time_update_timer_ > 0.1f)
-  {
-    time_update_timer_ = 0.0f;
-
-    updateTime();
-  }
-
-  frame_update_timer_ += wall_dt;
-
-  if (frame_update_timer_ > 1.0f)
-  {
-    frame_update_timer_ = 0.0f;
-
-    updateFrames();
-  }
-
-  selection_manager_->update();
-
-  if (tool_manager_->getCurrentTool())
-  {
-    tool_manager_->getCurrentTool()->update(wall_dt, ros_dt);
-  }
-
-  if (view_manager_ && view_manager_->getCurrent() && view_manager_->getCurrent()->getCamera())
-  {
-    directional_light_->setDirection(view_manager_->getCurrent()->getCamera()->getDerivedDirection());
-  }
-
-  frame_count_++;
-
-  if (render_requested_ || wall_dt > 0.01)
-  {
-    render_requested_ = 0;
-    boost::mutex::scoped_lock lock(private_->render_mutex_);
-    ogre_root_->renderOneFrame();
-  }
-}
-
-void VisualizationManager::updateTime()
-{
-  if (ros_time_begin_.isZero())
-  {
-    ros_time_begin_ = ros::Time::now();
-  }
-
-  ros_time_elapsed_ = ros::Time::now() - ros_time_begin_;
-
-  if (wall_clock_begin_.isZero())
-  {
-    wall_clock_begin_ = ros::WallTime::now();
-  }
-
-  wall_clock_elapsed_ = ros::WallTime::now() - wall_clock_begin_;
-}
-
-void VisualizationManager::updateFrames()
-{
-  if (!frame_manager_->getTF2BufferPtr()->_frameExists(getFixedFrame().toStdString()))
-  {
-    bool no_frames = frame_manager_->getTF2BufferPtr()->allFramesAsString().empty();
-    global_status_->setStatus(no_frames ? StatusProperty::Warn : StatusProperty::Error, "Fixed Frame",
-                              no_frames ? QString("No TF data") :
-                                          QString("Unknown frame %1").arg(getFixedFrame()));
-  }
-  else
-  {
-    global_status_->setStatus(StatusProperty::Ok, "Fixed Frame", "OK");
-  }
-}
-
-std::shared_ptr<tf2_ros::Buffer> VisualizationManager::getTF2BufferPtr() const
-{
-  return frame_manager_->getTF2BufferPtr();
-}
-
-void VisualizationManager::resetTime()
-{
-  root_display_group_->reset();
-  frame_manager_->getTF2BufferPtr()->clear();
-  ros_time_begin_ = ros::Time();
-  wall_clock_begin_ = ros::WallTime();
-
-  queueRender();
-}
-
-void VisualizationManager::addDisplay(Display* display, bool enabled)
-{
-  root_display_group_->addDisplay(display);
-  display->initialize(this);
-  display->setEnabled(enabled);
-}
-
-void VisualizationManager::removeAllDisplays()
-{
-  root_display_group_->removeAllDisplays();
-}
-
-void VisualizationManager::emitStatusUpdate(const QString& message)
-{
-  Q_EMIT statusUpdate(message);
-}
-
-void VisualizationManager::load(const Config& config)
-{
-  stopUpdate();
-
-  emitStatusUpdate("Creating displays");
-  root_display_group_->load(config);
-
-  emitStatusUpdate("Creating tools");
-  tool_manager_->load(config.mapGetChild("Tools"));
-
-  emitStatusUpdate("Creating views");
-  view_manager_->load(config.mapGetChild("Views"));
-
-  startUpdate();
-}
-
-void VisualizationManager::save(Config config) const
-{
-  root_display_group_->save(config);
-  tool_manager_->save(config.mapMakeChild("Tools"));
-  view_manager_->save(config.mapMakeChild("Views"));
-}
-
-Display*
-VisualizationManager::createDisplay(const QString& class_lookup_name, const QString& name, bool enabled)
-{
-  QApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
-  Display* new_display = root_display_group_->createDisplay(class_lookup_name);
-  addDisplay(new_display, enabled);
-  new_display->setName(name);
-  QApplication::restoreOverrideCursor();
-  return new_display;
-}
-
-double VisualizationManager::getWallClock()
-{
-  return ros::WallTime::now().toSec();
-}
-
-double VisualizationManager::getROSTime()
-{
-  return frame_manager_->getTime().toSec();
-}
-
-double VisualizationManager::getWallClockElapsed()
-{
-  return wall_clock_elapsed_.toSec();
-}
-
-double VisualizationManager::getROSTimeElapsed()
-{
-  return (frame_manager_->getTime() - ros_time_begin_).toSec();
-}
-
-void VisualizationManager::updateBackgroundColor()
-{
-  render_panel_->setBackgroundColor(qtToOgre(background_color_property_->getColor()));
-
-  queueRender();
-}
-
-void VisualizationManager::updateFps()
-{
-  if (update_timer_->isActive())
-  {
-    startUpdate();
-  }
-}
-
-void VisualizationManager::updateDefaultLightVisible()
-{
-  directional_light_->setVisible(default_light_enabled_property_->getBool());
-}
-
-void VisualizationManager::handleMouseEvent(const ViewportMouseEvent& vme)
-{
-  // process pending mouse events
-  Tool* current_tool = tool_manager_->getCurrentTool();
-
-  int flags = 0;
-  if (current_tool)
-  {
-    ViewportMouseEvent _vme = vme;
-    QWindow* window = vme.panel->windowHandle();
-    if (window)
+  public:
+    IconizedProperty(const QString& name = QString(),
+                     const QVariant& default_value = QVariant(),
+                     const QString& description = QString(),
+                     Property* parent = nullptr,
+                     const char* changed_slot = nullptr,
+                     QObject* receiver = nullptr)
+      : Property(name, default_value, description, parent, changed_slot, receiver){};
+    QVariant getViewData(int column, int role) const override
     {
-      double pixel_ratio = window->devicePixelRatio();
-      _vme.x = static_cast<int>(pixel_ratio * _vme.x);
-      _vme.y = static_cast<int>(pixel_ratio * _vme.y);
-      _vme.last_x = static_cast<int>(pixel_ratio * _vme.last_x);
-      _vme.last_y = static_cast<int>(pixel_ratio * _vme.last_y);
+      return (column == 0 && role == Qt::DecorationRole) ? icon_ : Property::getViewData(column, role);
     }
-    flags = current_tool->processMouseEvent(_vme);
-    vme.panel->setCursor(current_tool->getCursor());
-  }
-  else
+    void setIcon(const QIcon& icon) override
+    {
+      icon_ = icon;
+    }
+
+  private:
+    QIcon icon_;
+  };
+
+  class VisualizationManagerPrivate
   {
-    vme.panel->setCursor(QCursor(Qt::ArrowCursor));
+  public:
+    ros::CallbackQueue threaded_queue_;
+    boost::thread_group threaded_queue_threads_;
+    ros::NodeHandle update_nh_;
+    ros::NodeHandle threaded_nh_;
+    boost::mutex render_mutex_;
+  };
+
+  VisualizationManager::VisualizationManager(RenderPanel* render_panel,
+                                             WindowManagerInterface* wm,
+                                             std::shared_ptr<tf2_ros::Buffer> tf_buffer,
+                                             std::shared_ptr<tf2_ros::TransformListener> tf_listener)
+    : ogre_root_(Ogre::Root::getSingletonPtr())
+    , update_timer_(nullptr)
+    , shutting_down_(false)
+    , render_panel_(render_panel)
+    , time_update_timer_(0.0f)
+    , frame_update_timer_(0.0f)
+    , render_requested_(1)
+    , frame_count_(0)
+    , window_manager_(wm)
+    , private_(new VisualizationManagerPrivate)
+  {
+    // visibility_bit_allocator_ is listed after default_visibility_bit_ (and thus initialized later be
+    // default):
+    default_visibility_bit_ = visibility_bit_allocator_.allocBit();
+
+    frame_manager_ = new FrameManager(std::move(tf_buffer), std::move(tf_listener));
+
+    render_panel->setAutoRender(false);
+
+    private_->threaded_nh_.setCallbackQueue(&private_->threaded_queue_);
+
+    scene_manager_ = ogre_root_->createSceneManager(/*Ogre::ST_GENERIC*/);
+
+#ifdef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
+    // register our scene with the RTSS
+    mShaderGenerator = Ogre::RTShader::ShaderGenerator::getSingletonPtr();
+
+    if (initialiseRTShaderSystem())
+    {
+
+    }
+
+    mShaderGenerator->addSceneManager(scene_manager_);
+#endif
+
+    rviz::RenderSystem::RenderSystem::get()->prepareOverlays(scene_manager_);
+
+    rviz::RenderSystem::RenderSystem::get()->addSceneManagerToShaderGenerator(scene_manager_);
+
+    directional_light_ = scene_manager_->createLight("MainDirectional");
+    directional_light_->setType(Ogre::Light::LT_DIRECTIONAL);
+    directional_light_->setDirection(Ogre::Vector3(-1, 0, -1));
+    directional_light_->setDiffuseColour(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
+
+    root_display_group_ = new DisplayGroup();
+    root_display_group_->setName("root");
+    display_property_tree_model_ = new PropertyTreeModel(root_display_group_);
+    display_property_tree_model_->setDragDropClass("display");
+    connect(display_property_tree_model_, SIGNAL(configChanged()), this, SIGNAL(configChanged()));
+
+    tool_manager_ = new ToolManager(this);
+    connect(tool_manager_, SIGNAL(configChanged()), this, SIGNAL(configChanged()));
+    connect(tool_manager_, SIGNAL(toolChanged(Tool*)), this, SLOT(onToolChanged(Tool*)));
+
+    view_manager_ = new ViewManager(this);
+    view_manager_->setRenderPanel(render_panel_);
+    connect(view_manager_, SIGNAL(configChanged()), this, SIGNAL(configChanged()));
+
+    IconizedProperty* ip = new IconizedProperty("Global Options", QVariant(), "", root_display_group_);
+    ip->setIcon(loadPixmap("package://rviz/icons/options.png"));
+    global_options_ = ip;
+
+    fixed_frame_property_ =
+        new TfFrameProperty("Fixed Frame", "map",
+                            "Frame into which all data is transformed before being displayed.",
+                            global_options_, frame_manager_, false, SLOT(updateFixedFrame()), this);
+
+    background_color_property_ =
+        new ColorProperty("Background Color", QColor(48, 48, 48), "Background color for the 3D view.",
+                          global_options_, SLOT(updateBackgroundColor()), this);
+
+    fps_property_ =
+        new IntProperty("Frame Rate", 30, "RViz will try to render this many frames per second.",
+                        global_options_, SLOT(updateFps()), this);
+
+    default_light_enabled_property_ =
+        new BoolProperty("Default Light", true, "Light source attached to the current 3D view.",
+                         global_options_, SLOT(updateDefaultLightVisible()), this);
+
+    root_display_group_->initialize(
+          this); // only initialize() a Display after its sub-properties are created.
+    root_display_group_->setEnabled(true);
+
+    updateFixedFrame();
+    updateBackgroundColor();
+
+    global_status_ = new StatusList("Global Status", root_display_group_);
+
+    createColorMaterials();
+
+    selection_manager_ = new SelectionManager(this);
+
+    Ogre::ResourceManager::ResourceMapIterator materialIterator = Ogre::MaterialManager::getSingleton().getResourceIterator();
+
+    typedef independent_bits_engine<mt19937, 256, cpp_int> generator_type;
+    generator_type random_number_gen;
+
+    unsigned long material_count = 0;
+    std::vector<std::string> material_names;
+    while (materialIterator.hasMoreElements())
+    {
+      auto material_ptr = materialIterator.peekNextValue();
+      material_names.emplace_back(material_ptr->getName());
+      materialIterator.moveNext();
+      material_count++;
+    }
+
+    if (RenderSystem::get()->getRenderSystemType() == RenderSystem::VULKAN)
+    {
+      ROS_INFO_STREAM_NAMED("rviz", "Materials registered: " << material_count);
+      for (size_t k = 0; k < material_names.size(); k++)
+      {
+        Ogre::MaterialPtr material = Ogre::MaterialManager::getSingleton().getByName(material_names[k]);
+        ROS_INFO_STREAM_NAMED("rviz", " * Material " << material_names[k] << ": " << material->getNumTechniques() << " techniques.");
+        const Ogre::Material::Techniques& techniques = material->getTechniques();
+        for (size_t l = 0; l < techniques.size(); l++)
+        {
+          const Ogre::Technique* technique = techniques.at(l);
+
+          ROS_INFO_STREAM_NAMED("rviz", "   - Technique " << technique->getName() << ": " << technique->getNumPasses() << " passes.");
+          const Ogre::Technique::Passes& passes = technique->getPasses();
+          for (size_t m = 0; m < passes.size(); m++)
+          {
+            const Ogre::Pass* pass = passes.at(m);
+            ROS_INFO_STREAM_NAMED("rviz", "     + Pass " << pass->getName() << ": has fragment program = " << static_cast<int>(pass->hasFragmentProgram()) << ", has vertex program = " << static_cast<int>(pass->hasVertexProgram()));
+            /*if (pass->hasVertexProgram())
+            {
+              ROS_INFO_STREAM_NAMED("rviz", "        Has Vertex program: \n\"" << pass->getVertexProgram()->getSource() << "\"");
+            }*/
+            if (!pass->hasVertexProgram())
+            {
+              ROS_INFO_STREAM_NAMED("rviz", "        No Vertex program set, Vulkan doesn't like this. Adding a default vertex program to pass " << pass->getName());
+              Ogre::Pass* pass_to_edit = technique->getPass(pass->getName());
+
+              std::stringstream prog_name_str;
+              prog_name_str << (pass_to_edit->getName().empty() ? "" : pass_to_edit->getName()) << (pass_to_edit->getName().empty() ? "" : "_") << random_number_gen() << "_basic_vertex_shader";
+              Ogre::HighLevelGpuProgramPtr vertex = Ogre::HighLevelGpuProgramManager::getSingletonPtr()->createProgram(prog_name_str.str(), Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME, "glsl", Ogre::GpuProgramType::GPT_VERTEX_PROGRAM);
+              vertex->setSourceFile("solid_orange.vert");
+
+              pass_to_edit->setLightingEnabled(false);
+              pass_to_edit->setVertexProgram(vertex->getName());
+            }
+
+            /*if (pass->hasFragmentProgram())
+            {
+              ROS_INFO_STREAM_NAMED("rviz", "        Has Fragment program: \n\"" << pass->getFragmentProgram()->getSource() << "\"");
+            }*/
+            if (!pass->hasFragmentProgram())
+            {
+              ROS_INFO_STREAM_NAMED("rviz", "        No Fragment program set, Vulkan doesn't like this. Adding a default fragment program to pass " << pass->getName());
+              Ogre::Pass* pass_to_edit = technique->getPass(pass->getName());
+
+              std::stringstream prog_name_str;
+              prog_name_str << (pass_to_edit->getName().empty() ? "" : pass_to_edit->getName()) << (pass_to_edit->getName().empty() ? "" : "_") << random_number_gen() << "_basic_fragment_shader";
+              Ogre::HighLevelGpuProgramPtr fragment = Ogre::HighLevelGpuProgramManager::getSingletonPtr()->createProgram(prog_name_str.str(), Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME, "glsl", Ogre::GpuProgramType::GPT_FRAGMENT_PROGRAM);
+              fragment->setSourceFile("solid_orange.frag");
+
+              pass_to_edit->setLightingEnabled(false);
+              pass_to_edit->setFragmentProgram(fragment->getName());
+            }
+          }
+        }
+      }
+    }
+
+    update_timer_ = new QTimer;
+    connect(update_timer_, SIGNAL(timeout()), this, SLOT(onUpdate()));
+
+    private_->threaded_queue_threads_.create_thread(
+          boost::bind(&VisualizationManager::threadedQueueThreadFunc, this));
+
+    display_factory_ = new DisplayFactory();
+
+    ogre_render_queue_clearer_ = new OgreRenderQueueClearer();
+    Ogre::Root::getSingletonPtr()->addFrameListener(ogre_render_queue_clearer_);
   }
 
-  if (flags & Tool::Render)
+  VisualizationManager::~VisualizationManager()
   {
+    update_timer_->stop();
+    shutting_down_ = true;
+    private_->threaded_queue_threads_.join_all();
+
+    delete update_timer_;
+
+    if (selection_manager_)
+    {
+      selection_manager_->setSelection(M_Picked());
+    }
+
+    delete display_property_tree_model_;
+    delete tool_manager_;
+    delete display_factory_;
+    delete selection_manager_;
+    delete view_manager_;
+
+    if (ogre_root_)
+    {
+      ogre_root_->destroySceneManager(scene_manager_);
+    }
+    delete frame_manager_;
+    delete private_;
+
+    Ogre::Root::getSingletonPtr()->removeFrameListener(ogre_render_queue_clearer_);
+    delete ogre_render_queue_clearer_;
+  }
+
+  void VisualizationManager::initialize()
+  {
+    emitStatusUpdate("Initializing managers.");
+
+    view_manager_->initialize();
+    selection_manager_->initialize();
+    tool_manager_->initialize();
+
+    last_update_ros_time_ = ros::Time::now();
+    last_update_wall_time_ = ros::WallTime::now();
+  }
+
+  bool VisualizationManager::initialiseRTShaderSystem()
+  {
+#ifdef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
+    if (Ogre::RTShader::ShaderGenerator::initialize())
+    {
+      mShaderGenerator = Ogre::RTShader::ShaderGenerator::getSingletonPtr();
+
+      // Create and register the material manager listener if it doesn't exist yet.
+      if (!mMaterialMgrListener)
+      {
+        mMaterialMgrListener = new OgreSGTechniqueResolverListener(mShaderGenerator);
+        Ogre::MaterialManager::getSingleton().addListener(mMaterialMgrListener);
+      }
+
+      return true;
+    }
+#endif
+    return false;
+  }
+
+  ros::CallbackQueueInterface* VisualizationManager::getThreadedQueue()
+  {
+    return &private_->threaded_queue_;
+  }
+
+  void VisualizationManager::lockRender()
+  {
+    private_->render_mutex_.lock();
+  }
+
+  void VisualizationManager::unlockRender()
+  {
+    private_->render_mutex_.unlock();
+  }
+
+  ros::CallbackQueueInterface* VisualizationManager::getUpdateQueue()
+  {
+    return ros::getGlobalCallbackQueue();
+  }
+
+  void VisualizationManager::startUpdate()
+  {
+    float interval = 1000.0 / float(fps_property_->getInt());
+    update_timer_->start(interval);
+  }
+
+  void VisualizationManager::stopUpdate()
+  {
+    update_timer_->stop();
+  }
+
+  void createColorMaterial(const std::string& name,
+                           const Ogre::ColourValue& color,
+                           bool use_self_illumination)
+  {
+    Ogre::MaterialPtr mat = Ogre::MaterialManager::getSingleton().create(
+          name, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
+    mat->setAmbient(color * 0.5f);
+    mat->setDiffuse(color);
+    if (use_self_illumination)
+    {
+      mat->setSelfIllumination(color);
+    }
+    mat->setLightingEnabled(true);
+    mat->setReceiveShadows(false);
+  }
+
+  void VisualizationManager::createColorMaterials()
+  {
+    createColorMaterial("RVIZ/Red", Ogre::ColourValue(1.0f, 0.0f, 0.0f, 1.0f), true);
+    createColorMaterial("RVIZ/Green", Ogre::ColourValue(0.0f, 1.0f, 0.0f, 1.0f), true);
+    createColorMaterial("RVIZ/Blue", Ogre::ColourValue(0.0f, 0.0f, 1.0f, 1.0f), true);
+    createColorMaterial("RVIZ/Cyan", Ogre::ColourValue(0.0f, 1.0f, 1.0f, 1.0f), true);
+    createColorMaterial("RVIZ/ShadedRed", Ogre::ColourValue(1.0f, 0.0f, 0.0f, 1.0f), false);
+    createColorMaterial("RVIZ/ShadedGreen", Ogre::ColourValue(0.0f, 1.0f, 0.0f, 1.0f), false);
+    createColorMaterial("RVIZ/ShadedBlue", Ogre::ColourValue(0.0f, 0.0f, 1.0f, 1.0f), false);
+    createColorMaterial("RVIZ/ShadedCyan", Ogre::ColourValue(0.0f, 1.0f, 1.0f, 1.0f), false);
+  }
+
+  void VisualizationManager::queueRender()
+  {
+    render_requested_ = 1;
+  }
+
+  void VisualizationManager::onUpdate()
+  {
+    ros::WallDuration wall_diff = ros::WallTime::now() - last_update_wall_time_;
+    ros::Duration ros_diff = ros::Time::now() - last_update_ros_time_;
+    float wall_dt = wall_diff.toSec();
+    float ros_dt = ros_diff.toSec();
+    last_update_ros_time_ = ros::Time::now();
+    last_update_wall_time_ = ros::WallTime::now();
+
+    if (ros_dt < 0.0)
+    {
+      resetTime();
+    }
+
+    ros::spinOnce();
+
+    Q_EMIT preUpdate();
+
+    frame_manager_->update();
+
+    root_display_group_->update(wall_dt, ros_dt);
+
+    view_manager_->update(wall_dt, ros_dt);
+
+    time_update_timer_ += wall_dt;
+
+    if (time_update_timer_ > 0.1f)
+    {
+      time_update_timer_ = 0.0f;
+
+      updateTime();
+    }
+
+    frame_update_timer_ += wall_dt;
+
+    if (frame_update_timer_ > 1.0f)
+    {
+      frame_update_timer_ = 0.0f;
+
+      updateFrames();
+    }
+
+    selection_manager_->update();
+
+    if (tool_manager_->getCurrentTool())
+    {
+      tool_manager_->getCurrentTool()->update(wall_dt, ros_dt);
+    }
+
+    if (view_manager_ && view_manager_->getCurrent() && view_manager_->getCurrent()->getCamera())
+    {
+      directional_light_->setDirection(view_manager_->getCurrent()->getCamera()->getDerivedDirection());
+    }
+
+    frame_count_++;
+
+    if (render_requested_ || wall_dt > 0.01)
+    {
+      try
+      {
+        render_requested_ = 0;
+        boost::mutex::scoped_lock lock(private_->render_mutex_);
+        ogre_root_->renderOneFrame();
+      }
+      catch (Ogre::InvalidStateException& ex)
+      {
+        ROS_ERROR_STREAM_NAMED("rviz", "Ogre::InvalidStateException caught in onUpdate(): " << ex.what());
+        /*Ogre::ResourceManager::ResourceMapIterator materialIterator = Ogre::MaterialManager::getSingleton().getResourceIterator();
+
+        typedef independent_bits_engine<mt19937, 256, cpp_int> generator_type;
+        generator_type random_number_gen;
+
+        unsigned long material_count = 0;
+        std::vector<std::string> material_names;
+        while (materialIterator.hasMoreElements())
+        {
+          auto material_ptr = materialIterator.peekNextValue();
+          material_names.emplace_back(material_ptr->getName());
+          materialIterator.moveNext();
+          material_count++;
+        }
+        ROS_INFO_STREAM_NAMED("rviz", "Materials registered: " << material_count);
+        for (size_t k = 0; k < material_names.size(); k++)
+        {
+          Ogre::MaterialPtr material = Ogre::MaterialManager::getSingleton().getByName(material_names[k]);
+          ROS_INFO_STREAM_NAMED("rviz", " * Material " << material_names[k] << ": " << material->getNumTechniques() << " techniques.");
+          const Ogre::Material::Techniques& techniques = material->getTechniques();
+          for (size_t l = 0; l < techniques.size(); l++)
+          {
+            const Ogre::Technique* technique = techniques.at(l);
+            ROS_INFO_STREAM_NAMED("rviz", "   - Technique " << technique->getName() << ": " << technique->getNumPasses() << " passes.");
+            const Ogre::Technique::Passes& passes = technique->getPasses();
+            for (size_t m = 0; m < passes.size(); m++)
+            {
+              const Ogre::Pass* pass = passes.at(m);
+              ROS_INFO_STREAM_NAMED("rviz", "     + Pass " << pass->getName() << ": has fragment program = " << static_cast<int>(pass->hasFragmentProgram()) << ", has vertex program = " << static_cast<int>(pass->hasVertexProgram()));
+              if (pass->hasVertexProgram())
+              {
+                ROS_INFO_STREAM_NAMED("rviz", "        Has Vertex program: \n\"" << pass->getVertexProgram()->getSource() << "\"");
+              }
+              else
+              {
+                ROS_WARN_STREAM_NAMED("rviz", "        No Vertex program set, Vulkan doesn't like this. Adding an empty program definition.");
+                Ogre::Pass* pass_to_edit = technique->getPass(pass->getName());
+
+                std::stringstream prog_name_str;
+                prog_name_str << (pass_to_edit->getName().empty() ? "" : pass_to_edit->getName()) << (pass_to_edit->getName().empty() ? "" : "_") << random_number_gen() << "_basic_vertex_shader";
+                Ogre::HighLevelGpuProgramPtr vertex = Ogre::HighLevelGpuProgramManager::getSingletonPtr()->createProgram(prog_name_str.str(), Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME, "glsl", Ogre::GpuProgramType::GPT_VERTEX_PROGRAM);
+                vertex->setSourceFile("solid_orange.vert");
+
+                pass_to_edit->setLightingEnabled(false);
+                pass_to_edit->setVertexProgram(vertex->getName());
+              }
+
+              if (pass->hasFragmentProgram())
+              {
+                ROS_INFO_STREAM_NAMED("rviz", "        Has Fragment program: \n\"" << pass->getFragmentProgram()->getSource() << "\"");
+              }
+              else
+              {
+                ROS_WARN_STREAM_NAMED("rviz", "        No Fragment program set, Vulkan doesn't like this. Adding an empty program definition.");
+                Ogre::Pass* pass_to_edit = technique->getPass(pass->getName());
+
+                std::stringstream prog_name_str;
+                prog_name_str << (pass_to_edit->getName().empty() ? "" : pass_to_edit->getName()) << (pass_to_edit->getName().empty() ? "" : "_") << random_number_gen() << "_basic_fragment_shader";
+                Ogre::HighLevelGpuProgramPtr fragment = Ogre::HighLevelGpuProgramManager::getSingletonPtr()->createProgram(prog_name_str.str(), Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME, "glsl", Ogre::GpuProgramType::GPT_FRAGMENT_PROGRAM);
+                fragment->setSourceFile("solid_orange.frag");
+
+                pass_to_edit->setLightingEnabled(false);
+                pass_to_edit->setFragmentProgram(fragment->getName());
+              }
+            }
+          }
+        }*/
+      }
+    }
+  }
+
+  void VisualizationManager::updateTime()
+  {
+    if (ros_time_begin_.isZero())
+    {
+      ros_time_begin_ = ros::Time::now();
+    }
+
+    ros_time_elapsed_ = ros::Time::now() - ros_time_begin_;
+
+    if (wall_clock_begin_.isZero())
+    {
+      wall_clock_begin_ = ros::WallTime::now();
+    }
+
+    wall_clock_elapsed_ = ros::WallTime::now() - wall_clock_begin_;
+  }
+
+  void VisualizationManager::updateFrames()
+  {
+    if (!frame_manager_->getTF2BufferPtr()->_frameExists(getFixedFrame().toStdString()))
+    {
+      bool no_frames = frame_manager_->getTF2BufferPtr()->allFramesAsString().empty();
+      global_status_->setStatus(no_frames ? StatusProperty::Warn : StatusProperty::Error, "Fixed Frame",
+                                no_frames ? QString("No TF data") :
+                                            QString("Unknown frame %1").arg(getFixedFrame()));
+    }
+    else
+    {
+      global_status_->setStatus(StatusProperty::Ok, "Fixed Frame", "OK");
+    }
+  }
+
+  std::shared_ptr<tf2_ros::Buffer> VisualizationManager::getTF2BufferPtr() const
+  {
+    return frame_manager_->getTF2BufferPtr();
+  }
+
+  void VisualizationManager::resetTime()
+  {
+    root_display_group_->reset();
+    frame_manager_->getTF2BufferPtr()->clear();
+    ros_time_begin_ = ros::Time();
+    wall_clock_begin_ = ros::WallTime();
+
     queueRender();
   }
 
-  if (flags & Tool::Finished)
+  void VisualizationManager::addDisplay(Display* display, bool enabled)
   {
-    tool_manager_->setCurrentTool(tool_manager_->getDefaultTool());
+    root_display_group_->addDisplay(display);
+    display->initialize(this);
+    display->setEnabled(enabled);
   }
-}
 
-void VisualizationManager::handleChar(QKeyEvent* event, RenderPanel* panel)
-{
-  if (event->key() == Qt::Key_Escape)
-    Q_EMIT escapePressed();
-  tool_manager_->handleChar(event, panel);
-}
+  void VisualizationManager::removeAllDisplays()
+  {
+    root_display_group_->removeAllDisplays();
+  }
 
-void VisualizationManager::threadedQueueThreadFunc()
-{
-  ros::WallDuration timeout(0.1);
-  while (!shutting_down_)
+  void VisualizationManager::emitStatusUpdate(const QString& message)
+  {
+    Q_EMIT statusUpdate(message);
+  }
+
+  void VisualizationManager::load(const Config& config)
+  {
+    stopUpdate();
+
+    emitStatusUpdate("Creating displays");
+    root_display_group_->load(config);
+
+    emitStatusUpdate("Creating tools");
+    tool_manager_->load(config.mapGetChild("Tools"));
+
+    emitStatusUpdate("Creating views");
+    view_manager_->load(config.mapGetChild("Views"));
+
+    startUpdate();
+  }
+
+  void VisualizationManager::save(Config config) const
+  {
+    root_display_group_->save(config);
+    tool_manager_->save(config.mapMakeChild("Tools"));
+    view_manager_->save(config.mapMakeChild("Views"));
+  }
+
+  Display*
+  VisualizationManager::createDisplay(const QString& class_lookup_name, const QString& name, bool enabled)
+  {
+    QApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
+    Display* new_display = root_display_group_->createDisplay(class_lookup_name);
+    addDisplay(new_display, enabled);
+    new_display->setName(name);
+    QApplication::restoreOverrideCursor();
+    return new_display;
+  }
+
+  double VisualizationManager::getWallClock()
+  {
+    return ros::WallTime::now().toSec();
+  }
+
+  double VisualizationManager::getROSTime()
+  {
+    return frame_manager_->getTime().toSec();
+  }
+
+  double VisualizationManager::getWallClockElapsed()
+  {
+    return wall_clock_elapsed_.toSec();
+  }
+
+  double VisualizationManager::getROSTimeElapsed()
+  {
+    return (frame_manager_->getTime() - ros_time_begin_).toSec();
+  }
+
+  void VisualizationManager::updateBackgroundColor()
+  {
+    render_panel_->setBackgroundColor(qtToOgre(background_color_property_->getColor()));
+
+    queueRender();
+  }
+
+  void VisualizationManager::updateFps()
   {
     if (update_timer_->isActive())
-      private_->threaded_queue_.callOne(timeout);
-    else
-      timeout.sleep();
+    {
+      startUpdate();
+    }
   }
-}
 
-void VisualizationManager::notifyConfigChanged()
-{
-  Q_EMIT configChanged();
-}
+  void VisualizationManager::updateDefaultLightVisible()
+  {
+    directional_light_->setVisible(default_light_enabled_property_->getBool());
+  }
 
-void VisualizationManager::onToolChanged(Tool* /*tool*/)
-{
-}
+  void VisualizationManager::handleMouseEvent(const ViewportMouseEvent& vme)
+  {
+    // process pending mouse events
+    Tool* current_tool = tool_manager_->getCurrentTool();
 
-void VisualizationManager::updateFixedFrame()
-{
-  QString frame = fixed_frame_property_->getFrame();
+    int flags = 0;
+    if (current_tool)
+    {
+      ViewportMouseEvent _vme = vme;
+      QWindow* window = vme.panel->windowHandle();
+      if (window)
+      {
+        double pixel_ratio = window->devicePixelRatio();
+        _vme.x = static_cast<int>(pixel_ratio * _vme.x);
+        _vme.y = static_cast<int>(pixel_ratio * _vme.y);
+        _vme.last_x = static_cast<int>(pixel_ratio * _vme.last_x);
+        _vme.last_y = static_cast<int>(pixel_ratio * _vme.last_y);
+      }
+      flags = current_tool->processMouseEvent(_vme);
+      vme.panel->setCursor(current_tool->getCursor());
+    }
+    else
+    {
+      vme.panel->setCursor(QCursor(Qt::ArrowCursor));
+    }
 
-  frame_manager_->setFixedFrame(frame.toStdString());
-  root_display_group_->setFixedFrame(frame);
-}
+    if (flags & Tool::Render)
+    {
+      queueRender();
+    }
 
-QString VisualizationManager::getFixedFrame() const
-{
-  return fixed_frame_property_->getFrame();
-}
+    if (flags & Tool::Finished)
+    {
+      tool_manager_->setCurrentTool(tool_manager_->getDefaultTool());
+    }
+  }
 
-void VisualizationManager::setFixedFrame(const QString& frame)
-{
-  fixed_frame_property_->setValue(frame);
-}
+  void VisualizationManager::handleChar(QKeyEvent* event, RenderPanel* panel)
+  {
+    if (event->key() == Qt::Key_Escape)
+      Q_EMIT escapePressed();
+    tool_manager_->handleChar(event, panel);
+  }
 
-void VisualizationManager::setStatus(const QString& message)
-{
-  emitStatusUpdate(message);
-}
+  void VisualizationManager::threadedQueueThreadFunc()
+  {
+    ros::WallDuration timeout(0.1);
+    while (!shutting_down_)
+    {
+      if (update_timer_->isActive())
+        private_->threaded_queue_.callOne(timeout);
+      else
+        timeout.sleep();
+    }
+  }
+
+  void VisualizationManager::notifyConfigChanged()
+  {
+    Q_EMIT configChanged();
+  }
+
+  void VisualizationManager::onToolChanged(Tool* /*tool*/)
+  {
+  }
+
+  void VisualizationManager::updateFixedFrame()
+  {
+    QString frame = fixed_frame_property_->getFrame();
+
+    frame_manager_->setFixedFrame(frame.toStdString());
+    root_display_group_->setFixedFrame(frame);
+  }
+
+  QString VisualizationManager::getFixedFrame() const
+  {
+    return fixed_frame_property_->getFrame();
+  }
+
+  void VisualizationManager::setFixedFrame(const QString& frame)
+  {
+    fixed_frame_property_->setValue(frame);
+  }
+
+  void VisualizationManager::setStatus(const QString& message)
+  {
+    emitStatusUpdate(message);
+  }
 
 } // namespace rviz

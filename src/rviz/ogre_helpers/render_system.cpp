@@ -70,6 +70,8 @@ int RenderSystem::force_gl_version_ = 0;
 bool RenderSystem::use_anti_aliasing_ = true;
 bool RenderSystem::force_no_stereo_ = false;
 
+RenderSystem::RenderSystemType RenderSystem::render_system_type_ = OPENGL;
+
 RenderSystem* RenderSystem::get()
 {
   if (instance_ == nullptr)
@@ -95,6 +97,18 @@ void RenderSystem::forceNoStereo()
 {
   force_no_stereo_ = true;
   ROS_INFO("Forcing Stereo OFF");
+}
+
+void RenderSystem::setRenderSystemType(RenderSystemType render_system_type)
+{
+  ROS_INFO_STREAM_NAMED("rviz", "Setting render system type: " << render_system_type);
+  render_system_type_ = render_system_type;
+}
+
+RenderSystem::RenderSystemType RenderSystem::getRenderSystemType()
+{
+  ROS_INFO_STREAM_NAMED("rviz", "Getting render system type: " << render_system_type_);
+  return render_system_type_;
 }
 
 RenderSystem::RenderSystem() : ogre_overlay_system_(nullptr), stereo_supported_(false)
@@ -180,6 +194,8 @@ void RenderSystem::loadOgrePlugins()
   plugin_prefix += "lib";
 #endif
   ogre_root_->loadPlugin(plugin_prefix + "RenderSystem_GL");
+  ogre_root_->loadPlugin(plugin_prefix + "RenderSystem_Vulkan");
+
   ogre_root_->loadPlugin(plugin_prefix + "Plugin_OctreeSceneManager");
   ogre_root_->loadPlugin(plugin_prefix + "Plugin_ParticleFX");
 #if OGRE_VERSION >= OGRE_VERSION_CHECK(1, 11, 0)
@@ -254,12 +270,40 @@ void RenderSystem::setupRenderSystem()
   // Get the list of available renderers.
   const Ogre::RenderSystemList* rsList = &(ogre_root_->getAvailableRenderers());
 
+  ROS_INFO_STREAM_NAMED("rviz", "Available render systems: " << rsList->size());
+  for (unsigned int i = 0; i < rsList->size(); i++)
+  {
+    renderSys = rsList->at(i);
+    ROS_INFO_STREAM_NAMED("rviz", " - Render system: " << renderSys->getName());
+  }
+
+  std::string renderSystemRequested;
+
+  ROS_INFO_STREAM_NAMED("rviz", "Render system type: " << render_system_type_);
+
+  if (render_system_type_ == OPENGL)
+  {
+    ROS_INFO_STREAM_NAMED("rviz", "Setting render system identifier string to: 'OpenGL Rendering Subsystem'");
+    renderSystemRequested = "OpenGL Rendering Subsystem";
+  }
+  else if (render_system_type_ == VULKAN)
+  {
+    ROS_INFO_STREAM_NAMED("rviz", "Setting render system identifier string to: 'Vulkan Rendering Subsystem'");
+    renderSystemRequested = "Vulkan Rendering Subsystem";
+  }
+
+  ROS_INFO_STREAM_NAMED("rviz", "Render system requested: " << renderSystemRequested);
+
   // Look for the OpenGL one, which we require.
   renderSys = nullptr;
   for (unsigned int i = 0; i < rsList->size(); i++)
   {
     renderSys = rsList->at(i);
-    if (renderSys->getName().compare("OpenGL Rendering Subsystem") == 0)
+    if (render_system_type_ == OPENGL && renderSys->getName().compare("OpenGL Rendering Subsystem") == 0)
+    {
+      break;
+    }
+    else if (render_system_type_ == VULKAN && renderSys->getName().compare("Vulkan Rendering Subsystem") == 0)
     {
       break;
     }
@@ -267,8 +311,10 @@ void RenderSystem::setupRenderSystem()
 
   if (renderSys == nullptr)
   {
-    throw std::runtime_error("Could not find the opengl rendering subsystem!\n");
+    throw std::runtime_error("Could not find the requested rendering subsystem!\n");
   }
+
+  ROS_INFO_STREAM_NAMED("rviz", "Using render system: \"" << renderSys->getName() << "\"");
 
   // We operate in windowed mode
   renderSys->setConfigOption("Full Screen", "No");
@@ -360,14 +406,14 @@ void RenderSystem::setupResources()
       while (pos2 != (int)std::string::npos)
       {
         path = iter->substr(pos1, pos2 - pos1);
-        ROS_DEBUG("adding resource location: '%s'\n", path.c_str());
+        ROS_DEBUG("Adding resource location: '%s'\n", path.c_str());
         Ogre::ResourceGroupManager::getSingleton().addResourceLocation(
             path, "FileSystem", Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
         pos1 = pos2 + 1;
         pos2 = iter->find(delim, pos2 + 1);
       }
       path = iter->substr(pos1, iter->size() - pos1);
-      ROS_DEBUG("adding resource location: '%s'\n", path.c_str());
+      ROS_DEBUG("Adding resource location: '%s'\n", path.c_str());
       Ogre::ResourceGroupManager::getSingleton().addResourceLocation(
           path, "FileSystem", Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
     }

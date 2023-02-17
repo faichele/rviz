@@ -746,46 +746,56 @@ bool SelectionManager::render(Ogre::Viewport* viewport,
   // update & force ogre to render the scene
   Ogre::MaterialManager::getSingleton().addListener(this);
 
-  render_texture->update();
-
-  // For some reason we need to pretend to render the main window in
-  // order to get the picking render to show up in the pixelbox below.
-  // If we don't do this, it will show up there the *next* time we
-  // pick something, but not this time.  This object as a
-  // render queue listener tells the scene manager to skip every
-  // render step, so nothing actually gets drawn.
-  //
-  // TODO: find out what part of _renderScene() actually makes this work.
-  Ogre::Viewport* main_view = vis_manager_->getRenderPanel()->getViewport();
-  vis_manager_->getSceneManager()->addRenderQueueListener(this);
-  vis_manager_->getSceneManager()->_renderScene(main_view->getCamera(), main_view, false);
-  vis_manager_->getSceneManager()->removeRenderQueueListener(this);
-
-  ros::WallTime end = ros::WallTime::now();
-  ros::WallDuration d = end - start;
-  //  ROS_DEBUG("Render took [%f] msec", d.toSec() * 1000.0f);
-  Q_UNUSED(d);
-
-  Ogre::MaterialManager::getSingleton().removeListener(this);
-
-  render_w = render_viewport->getActualWidth();
-  render_h = render_viewport->getActualHeight();
-
-  Ogre::PixelFormat format = pixel_buffer->getFormat();
-
-  int size = Ogre::PixelUtil::getMemorySize(render_w, render_h, 1, format);
-  uint8_t* data = new uint8_t[size];
-
-  delete[](uint8_t*) dst_box.data;
-  dst_box = Ogre::PixelBox(render_w, render_h, 1, format, data);
-
-  pixel_buffer->blitToMemory(dst_box, dst_box);
-
-  vis_manager_->unlockRender();
-
-  if (debug_mode_)
+  try
   {
-    publishDebugImage(dst_box, material_scheme);
+    render_texture->update();
+
+    // For some reason we need to pretend to render the main window in
+    // order to get the picking render to show up in the pixelbox below.
+    // If we don't do this, it will show up there the *next* time we
+    // pick something, but not this time.  This object as a
+    // render queue listener tells the scene manager to skip every
+    // render step, so nothing actually gets drawn.
+    //
+    // TODO: find out what part of _renderScene() actually makes this work.
+    Ogre::Viewport* main_view = vis_manager_->getRenderPanel()->getViewport();
+    vis_manager_->getSceneManager()->addRenderQueueListener(this);
+    vis_manager_->getSceneManager()->_renderScene(main_view->getCamera(), main_view, false);
+    vis_manager_->getSceneManager()->removeRenderQueueListener(this);
+
+    ros::WallTime end = ros::WallTime::now();
+    ros::WallDuration d = end - start;
+    //  ROS_DEBUG("Render took [%f] msec", d.toSec() * 1000.0f);
+    Q_UNUSED(d);
+
+    Ogre::MaterialManager::getSingleton().removeListener(this);
+
+    render_w = render_viewport->getActualWidth();
+    render_h = render_viewport->getActualHeight();
+
+    Ogre::PixelFormat format = pixel_buffer->getFormat();
+
+    int size = Ogre::PixelUtil::getMemorySize(render_w, render_h, 1, format);
+    uint8_t* data = new uint8_t[size];
+
+    delete[](uint8_t*) dst_box.data;
+    dst_box = Ogre::PixelBox(render_w, render_h, 1, format, data);
+
+    pixel_buffer->blitToMemory(dst_box, dst_box);
+
+    vis_manager_->unlockRender();
+
+    if (debug_mode_)
+    {
+      publishDebugImage(dst_box, material_scheme);
+    }
+  }
+  catch (Ogre::InvalidStateException& ex)
+  {
+    ROS_ERROR_STREAM_NAMED("rviz", "Ogre::InvalidStateException caught n SelectionManager::render(): " << ex.what());
+
+    vis_manager_->unlockRender();
+    return false;
   }
 
   return true;

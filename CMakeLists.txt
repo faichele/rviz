@@ -12,6 +12,20 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# When catkin has a really bad day...
+set(cmake_modules_DIR $ENV{ROS_ROOT}/../../share/cmake_modules/cmake)
+set(geometry_msgs_DIR $ENV{ROS_ROOT}/../../share/geometry_msgs/cmake)
+set(image_transport_DIR $ENV{ROS_ROOT}/../../share/image_transport/cmake)
+set(interactive_markers_DIR $ENV{ROS_ROOT}/../../share/interactive_markers/cmake)
+set(laser_geometry_DIR $ENV{ROS_ROOT}/../../share/laser_geometry/cmake)
+set(map_msgs_DIR $ENV{ROS_ROOT}/../../share/map_msgs/cmake)
+set(python_qt_binding_DIR $ENV{ROS_ROOT}/../../share/python_qt_binding/cmake)
+set(resource_retriever_DIR $ENV{ROS_ROOT}/../../share/resource_retriever/cmake)
+set(rosbag_DIR $ENV{ROS_ROOT}/../../share/rosbag/cmake)
+set(tf2_geometry_msgs_DIR $ENV{ROS_ROOT}/../../share/tf2_geometry_msgs/cmake)
+set(urdf_DIR $ENV{ROS_ROOT}/../../share/urdf/cmake)
+set(std_msgs_DIR $ENV{ROS_ROOT}/../../share/std_msgs/cmake)
+
 # Define global caktin_lint suppressions
 #catkin_lint: ignore uninstalled_script missing_install_target
 
@@ -229,6 +243,9 @@ include_directories(SYSTEM
   ${ASSIMP_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
 )
+
+# Add external libraries
+add_subdirectory(external)
 
 #### If gtk ends up being the best way to get the correct window
 #### position under X11, this is how to compile it in.

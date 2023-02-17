@@ -134,7 +134,7 @@ namespace rviz
 
       startContinueChecker();
 
-      std::string display_config, fixed_frame, splash_path, help_path;
+      std::string display_config, fixed_frame, splash_path, help_path, render_system;
       int force_gl_version = 0;
 
       po::options_description options;
@@ -152,10 +152,12 @@ namespace rviz
           ("in-mc-wrapper", "Signal that this is running inside a master-chooser wrapper")
           ("opengl", po::value<int>(&force_gl_version),
            "Force OpenGL version (use '--opengl 210' for OpenGL 2.1 compatibility mode)")
+          ("render-system", po::value<std::string>(&render_system), "Render system to use (\"OpenGL\" or \"Vulkan\", defaults to \"OpenGL\")")
           ("disable-anti-aliasing", "Prevent rviz from trying to use anti-aliasing when rendering.")
           ("no-stereo", "Disable the use of stereo rendering.")("verbose,v", "Enable debug visualizations")
           ("log-level-debug", "Sets the ROS logger level to debug.");
       // clang-format on
+
       po::variables_map vm;
       try
       {
@@ -182,6 +184,14 @@ namespace rviz
         return false;
       }
 
+      ROS_INFO_STREAM_NAMED("rviz", "Render system command line parameter: '" << render_system << "'");
+
+      if (render_system.empty())
+      {
+        ROS_INFO("No render system specified in command line parameters, defaulting to 'OpenGL'.");
+        render_system = "OpenGL";
+      }
+
       if (!ros::master::check())
       {
         WaitForMasterDialog dialog;
@@ -195,6 +205,17 @@ namespace rviz
 
       if (vm.count("ogre-log"))
         OgreLogging::useRosLog();
+
+      if (render_system == "Vulkan")
+      {
+        ROS_INFO("Render system 'Vulkan' specified in command line arguments.");
+        RenderSystem::setRenderSystemType(RenderSystem::RenderSystemType::VULKAN);
+      }
+      else
+      {
+        ROS_INFO("Render system 'OpenGL' specified in command line arguments.");
+        RenderSystem::setRenderSystemType(RenderSystem::RenderSystemType::OPENGL);
+      }
 
       RenderSystem::forceGlVersion(force_gl_version);
 

@@ -1,0 +1,3 @@
+[submodule "external/instant-ngp"]
+	path = external/instant-ngp
+	url = git@github.com:faichele/instant-ngp.git

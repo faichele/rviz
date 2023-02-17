@@ -63,6 +63,7 @@ add_library(${PROJECT_NAME}
   ogre_helpers/object.cpp
   ogre_helpers/ogre_logging.cpp
   ogre_helpers/ogre_render_queue_clearer.cpp
+  ogre_helpers/ogre_sg_technique_resolver_listener.cpp
   ogre_helpers/orthographic.cpp
   ogre_helpers/point_cloud.cpp
   ogre_helpers/qt_ogre_render_window.cpp

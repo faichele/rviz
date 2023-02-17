@@ -41,6 +41,11 @@
 #include <rviz/display_context.h>
 #include <rviz/rviz_export.h>
 
+#include <OGRE/OgreComponents.h>
+#ifdef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
+#include "ogre_helpers/ogre_sg_technique_resolver_listener.h"
+#endif // INCLUDE_RTSHADER_SYSTEM
+
 class QKeyEvent;
 class QTimer;
 
@@ -50,6 +55,10 @@ class Root;
 class SceneManager;
 class SceneNode;
 class Light;
+namespace RTShader
+{
+  class ShaderGenerator;
+}
 } // namespace Ogre
 
 namespace ros
@@ -402,8 +411,15 @@ protected:
 
   void threadedQueueThreadFunc();
 
+  bool initialiseRTShaderSystem();
+
   Ogre::Root* ogre_root_;             ///< Ogre Root
   Ogre::SceneManager* scene_manager_; ///< Ogre scene manager associated with this panel
+
+#ifdef OGRE_BUILD_COMPONENT_RTSHADERSYSTEM
+  Ogre::RTShader::ShaderGenerator*       mShaderGenerator; // The Shader generator instance.
+  OgreSGTechniqueResolverListener*       mMaterialMgrListener; // Shader generator material manager listener.
+#endif
 
   QTimer* update_timer_; ///< Display::update is called on each display whenever this timer fires
   ros::Time last_update_ros_time_; ///< Stores how long it's been since the last update
